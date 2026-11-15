@@ -1,0 +1,1995 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Upper/Lower 4x — Jeff Nippard Tracker</title>
+
+  <!-- iOS Safari PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Upper/Lower 4x" />
+  <meta name="theme-color" content="#090d16" />
+
+  <!-- Inline SVG App Icon for iOS Home Screen & Browser Tab -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%230f172a'/%3E%3Crect x='36' y='36' width='440' height='440' rx='88' fill='none' stroke='%23ef4444' stroke-width='16'/%3E%3Cpath d='M110 256h292M145 190v132M115 212v88M367 190v132M397 212v88' stroke='%23f8fafc' stroke-width='28' stroke-linecap='round'/%3E%3Ctext x='256' y='415' text-anchor='middle' font-family='sans-serif' font-weight='900' font-size='54' fill='%23ef4444'%3EU/L 4X%3C/text%3E%3C/svg%3E" />
+  <link id="appleTouchIcon" rel="apple-touch-icon" href="" />
+
+  <!-- Tailwind CSS & Chart.js & Tone.js -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+          colors: {
+            void: '#090d16',
+            panel: '#111827',
+            panelLight: '#1e293b',
+            crimson: '#ef4444'
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    html, body {
+      background-color: #090d16;
+      color: #f1f5f9;
+      font-family: 'Inter', sans-serif;
+      overscroll-behavior-y: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .safe-top {
+      padding-top: max(env(safe-area-inset-top), 0.75rem);
+    }
+    .safe-bottom {
+      padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .muscle-hotspot {
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .muscle-hotspot:hover {
+      fill: rgba(239, 68, 68, 0.7);
+      stroke: #fca5a5;
+      stroke-width: 1.8;
+    }
+    .muscle-hotspot.active {
+      fill: rgba(239, 68, 68, 0.88);
+      stroke: #ffffff;
+      stroke-width: 2;
+      filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.75));
+    }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade {
+      animation: fadeIn 0.22s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-28 sm:pb-24 antialiased selection:bg-red-500/30 selection:text-red-200">
+
+  <!-- Toast Notification Banner (Replaces alert/confirm) -->
+  <div id="toastBanner" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 hidden max-w-sm w-[92%] bg-slate-900 border border-red-500/60 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3">
+    <span id="toastMessage" class="text-xs sm:text-sm font-semibold"></span>
+    <button onclick="hideToast()" class="text-slate-400 hover:text-white text-xs font-bold px-2 py-1">✕</button>
+  </div>
+
+  <!-- Confirmation Modal (Replaces confirm) -->
+  <div id="confirmModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-slate-700 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+      <h3 class="text-base font-extrabold text-white">Reset All Workout Progress?</h3>
+      <p class="text-xs text-slate-300 leading-relaxed">
+        This will permanently clear all logged weights, reps, LSRPE scores, and completed checkboxes across all 9 weeks. Consider exporting a JSON backup first.
+      </p>
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button id="cancelResetBtn" class="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition">Cancel</button>
+        <button id="confirmResetBtn" class="px-4 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition">Yes, Reset All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Substitution Modal -->
+  <div id="subModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div class="bg-[#111827] border-t sm:border border-slate-700 rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-red-400">Exercise Substitution</span>
+          <h3 id="subModalTitle" class="text-base font-extrabold text-white mt-0.5">Replace Exercise</h3>
+        </div>
+        <button onclick="closeSubModal()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center text-sm font-bold">✕</button>
+      </div>
+      <p class="text-xs text-slate-400">Select an approved substitution from Jeff Nippard’s manual (Pages 74–78) or enter a custom movement:</p>
+      <div id="subModalOptions" class="space-y-2"></div>
+      <div class="pt-2 border-t border-slate-800 space-y-2">
+        <label class="block text-[11px] font-bold uppercase text-slate-400">Or Custom Exercise Name</label>
+        <div class="flex gap-2">
+          <input id="customSubInput" type="text" placeholder="Type custom exercise..." class="flex-1 px-3 py-2 text-xs rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-red-500" />
+          <button id="saveCustomSubBtn" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Sticky Header -->
+  <header class="sticky top-0 z-30 bg-[#090d16]/95 backdrop-blur-md border-b border-slate-800/90 safe-top">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center shrink-0">
+            <span class="text-red-400 font-black text-xs tracking-tighter">U/L</span>
+          </div>
+          <div class="truncate">
+            <h1 class="text-sm sm:text-lg font-extrabold text-white tracking-tight truncate">
+              Jeff Nippard’s Upper/Lower 4x
+            </h1>
+            <p class="text-[11px] text-slate-400 truncate">9-Week Size &amp; Strength Program • Interactive Tracker</p>
+          </div>
+        </div>
+
+        <!-- Global Progress Pill + Timer Trigger -->
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="toggleTimerDrawer()" class="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 flex items-center gap-1.5 transition">
+            <span class="w-2 h-2 rounded-full bg-emerald-400" id="headerTimerDot"></span>
+            <span id="headerTimerLabel">Timer</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Overall 9-Week Completion Progress Bar -->
+      <div class="mt-2.5">
+        <div class="flex items-center justify-between text-[11px] mb-1">
+          <span class="font-semibold text-slate-300">9-Week Program Completion</span>
+          <span id="globalProgressText" class="font-bold text-red-400">0% (0 / 248 Exercises)</span>
+        </div>
+        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div id="globalProgressBar" class="h-full bg-gradient-to-r from-red-600 to-amber-500 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Primary Desktop / Tablet Navigation Tabs -->
+      <nav class="hidden sm:flex items-center gap-1.5 mt-3 pt-2.5 border-t border-slate-800/80" role="tablist">
+        <button data-main-tab="tracker" class="main-nav-btn active px-4 py-2 rounded-xl text-xs font-bold bg-red-600 text-white shadow transition">
+          1. 9-Week Program &amp; Tracker
+        </button>
+        <button data-main-tab="substitutions" class="main-nav-btn px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          2. Substitutions &amp; Weak Points
+        </button>
+        <button data-main-tab="anatomy" class="main-nav-btn px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          3. Functional Anatomy (pp. 13–23)
+        </button>
+        <button data-main-tab="guide" class="main-nav-btn px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition">
+          4. Warm-Up, Hints &amp; FAQ
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-7xl mx-auto px-3 sm:px-6 py-5">
+
+    <!-- =================================================================== -->
+    <!-- TAB 1: 9-WEEK PROGRAM & EXCEL INTERACTIVE TRACKER                   -->
+    <!-- =================================================================== -->
+    <section id="tab-tracker" class="main-section space-y-5 animate-fade">
+
+      <!-- 1RM & Unit Calculator + Backup Controls -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-4 sm:p-5 shadow-xl">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-red-400">Auto-Load Calculator (Excel Sheet Sync)</span>
+            <h2 class="text-base sm:text-lg font-extrabold text-white">1-Rep Max (1RM) &amp; Unit Settings</h2>
+          </div>
+
+          <!-- Unit Toggle + Export/Reset -->
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="inline-flex rounded-xl bg-slate-900 p-1 border border-slate-700">
+              <button id="unitKgBtn" onclick="setUnit('kg')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white transition">
+                KG (nearest 2.5)
+              </button>
+              <button id="unitLbsBtn" onclick="setUnit('lbs')" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition">
+                LBS (nearest 5)
+              </button>
+            </div>
+
+            <button onclick="exportProgressJSON()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition">
+              Export JSON
+            </button>
+            <button onclick="exportProgressCSV()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 transition">
+              Export CSV
+            </button>
+            <button onclick="openConfirmModal()" class="px-3 py-2 rounded-xl bg-red-950/70 hover:bg-red-900 border border-red-800/70 text-xs font-bold text-red-300 transition">
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- 1RM Inputs -->
+        <div class="grid grid-cols-3 gap-3 mt-4">
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+            <label for="squat1rm" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Squat 1RM (<span class="unit-label">kg</span>)
+            </label>
+            <input id="squat1rm" type="number" step="2.5" value="100" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-sm sm:text-base font-extrabold text-white focus:outline-none focus:border-red-500" />
+          </div>
+
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+            <label for="bench1rm" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Bench 1RM (<span class="unit-label">kg</span>)
+            </label>
+            <input id="bench1rm" type="number" step="2.5" value="100" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-sm sm:text-base font-extrabold text-white focus:outline-none focus:border-red-500" />
+          </div>
+
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+            <label for="deadlift1rm" class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Deadlift 1RM (<span class="unit-label">kg</span>)
+            </label>
+            <input id="deadlift1rm" type="number" step="2.5" value="100" class="mt-1 w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-2 text-sm sm:text-base font-extrabold text-white focus:outline-none focus:border-red-500" />
+          </div>
+        </div>
+
+        <!-- Active Weak Points Quick Banner -->
+        <div class="mt-4 pt-3 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-slate-400 font-semibold">Active Weak Points:</span>
+            <span class="px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 font-bold" id="activeUpperWpBadge">Upper: Not Selected</span>
+            <span class="px-2.5 py-1 rounded-lg bg-blue-500/15 border border-blue-500/30 text-blue-300 font-bold" id="activeLowerWpBadge">Lower: Not Selected</span>
+          </div>
+          <button onclick="switchMainTab('substitutions')" class="text-red-400 hover:text-red-300 font-bold underline text-left sm:text-right">
+            Configure Weak Points →
+          </button>
+        </div>
+      </div>
+
+      <!-- Collapsible Progress Analytics Chart Card -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-4 sm:p-5 shadow-xl">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-amber-400">Analytics &amp; Wave Periodization</span>
+            <h3 class="text-sm sm:text-base font-extrabold text-white">9-Week Volume, %1RM Progression &amp; Completion Chart</h3>
+          </div>
+          <button id="toggleChartBtn" onclick="toggleAnalyticsChart()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 transition">
+            Hide Chart
+          </button>
+        </div>
+
+        <div id="analyticsChartBody" class="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+          <div class="lg:col-span-8 bg-slate-950/80 border border-slate-800 rounded-xl p-3 h-56 sm:h-64">
+            <canvas id="waveChart"></canvas>
+          </div>
+          <div class="lg:col-span-4 space-y-2.5">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+              <div class="flex justify-between text-xs font-bold text-slate-300 mb-1">
+                <span>Wave 1 (Weeks 1–3)</span>
+                <span id="wave1Pct" class="text-red-400">0%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="wave1Bar" class="h-full bg-red-500 transition-all" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+              <div class="flex justify-between text-xs font-bold text-slate-300 mb-1">
+                <span>Wave 2 (Weeks 4–6)</span>
+                <span id="wave2Pct" class="text-amber-400">0%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="wave2Bar" class="h-full bg-amber-500 transition-all" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+              <div class="flex justify-between text-xs font-bold text-slate-300 mb-1">
+                <span>Wave 3 (Weeks 7–9)</span>
+                <span id="wave3Pct" class="text-emerald-400">0%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="wave3Bar" class="h-full bg-emerald-500 transition-all" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Week Selector (Weeks 1–9 grouped by Wave) & Day Selector -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-4 shadow-xl space-y-4">
+        <!-- Wave & Week Selector -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Select Training Week (1–9)</span>
+            <span id="waveTag" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
+              Wave 1 • Mini-Deload Baseline
+            </span>
+          </div>
+          <div id="weekSelectorGrid" class="grid grid-cols-3 sm:grid-cols-9 gap-1.5"></div>
+        </div>
+
+        <!-- Workout Day Tabs -->
+        <div class="pt-3 border-t border-slate-800">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Select Workout Session</span>
+            <span id="sessionVolumeBadge" class="text-xs font-bold text-slate-300">Total Working Sets: 0</span>
+          </div>
+          <div id="daySelectorTabs" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
+        </div>
+      </div>
+
+      <!-- Active Workout Exercise Cards / Table -->
+      <div id="workoutExercisesContainer" class="space-y-3"></div>
+
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 2: SUBSTITUTIONS & WEAK POINT SPECIALIZATION (PP. 59, 74–78)    -->
+    <!-- =================================================================== -->
+    <section id="tab-substitutions" class="main-section hidden space-y-6 animate-fade">
+
+      <!-- Weak Point Specialization Configurator (Page 59) -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-5 shadow-xl space-y-4">
+        <div class="border-b border-slate-800 pb-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-red-400">Page 59 • Weak Point Specialization</span>
+          <h2 class="text-lg font-extrabold text-white mt-0.5">Select Your Target Weak Points (Injects Directly Into Tracker)</h2>
+          <p class="text-xs text-slate-400 mt-1">
+            Jeff Nippard recommends picking <strong>2 or 3 lagging body parts</strong> before Week 1 and sticking with them for all 9 weeks (3 sets × 15–20 reps @ RPE 9).
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Upper Body Weak Point Picker -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-red-400">Upper Body Weak Point 1</span>
+              <span class="text-[11px] text-slate-400">Upper #1 &amp; Upper #2</span>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">1. Target Upper Muscle Group</label>
+              <select id="upperWpMuscleSelect" class="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-red-500"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">2. Choose Specialization Exercise</label>
+              <select id="upperWpExerciseSelect" class="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-red-500"></select>
+            </div>
+          </div>
+
+          <!-- Lower Body Weak Point Picker -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-extrabold uppercase tracking-wider text-blue-400">Lower Body Weak Point 1</span>
+              <span class="text-[11px] text-slate-400">Lower #2</span>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">1. Target Lower Muscle Group</label>
+              <select id="lowerWpMuscleSelect" class="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-blue-500"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">2. Choose Specialization Exercise</label>
+              <select id="lowerWpExerciseSelect" class="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:border-blue-500"></select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Full Exercise Substitutions Directory (Pages 74–78) -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-5 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-amber-400">Pages 74–78 • Complete Directory</span>
+            <h2 class="text-lg font-extrabold text-white mt-0.5">Approved Exercise Substitutions (56 Movements)</h2>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input id="subSearchInput" type="text" placeholder="Search exercise or substitute..." class="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-red-500" />
+            <div class="flex gap-1 bg-slate-900 p-1 rounded-xl border border-slate-700">
+              <button data-sub-cat="all" class="sub-cat-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-red-600 text-white">All</button>
+              <button data-sub-cat="lower" class="sub-cat-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300">Lower</button>
+              <button data-sub-cat="upper" class="sub-cat-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300">Upper</button>
+              <button data-sub-cat="abs" class="sub-cat-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300">Abs</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="substitutionsDirectoryGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 3: FUNCTIONAL ANATOMY & TARGET MUSCLES (PAGES 13–23)            -->
+    <!-- =================================================================== -->
+    <section id="tab-anatomy" class="main-section hidden space-y-6 animate-fade">
+      <!-- Biomechanics Foundations -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-5 shadow-xl">
+        <span class="text-xs font-bold uppercase tracking-wider text-red-400">Page 13 • Biomechanical Foundations</span>
+        <h2 class="text-lg font-extrabold text-white mt-0.5">Origin, Insertion &amp; Contraction Phases</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+            <span class="text-xs font-extrabold text-blue-400">Origin (Fixed)</span>
+            <p class="text-xs text-slate-300 mt-1">Fixed proximal bone attachment that does not move during contraction.</p>
+          </div>
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+            <span class="text-xs font-extrabold text-emerald-400">Insertion (Moving)</span>
+            <p class="text-xs text-slate-300 mt-1">Distal attachment that moves closer to the origin when contracting.</p>
+          </div>
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+            <span class="text-xs font-extrabold text-red-400">Concentric ("Positive")</span>
+            <p class="text-xs text-slate-300 mt-1">Shortening/lifting phase as the insertion pulls toward the origin.</p>
+          </div>
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+            <span class="text-xs font-extrabold text-amber-400">Eccentric ("Negative")</span>
+            <p class="text-xs text-slate-300 mt-1">Controlled lengthening/lowering phase—key driver of hypertrophy.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Body Map + 12 Muscle Cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <aside class="lg:col-span-4 rounded-2xl bg-[#111827] border border-slate-800 p-4 shadow-xl">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-extrabold text-white">Interactive Body Map</h3>
+            <button id="resetAnatomyFilterBtn" class="hidden text-xs text-red-400 font-bold underline">Show All</button>
+          </div>
+          <p class="text-xs text-slate-400 mb-3">Tap any muscle region to inspect its attachments and exercises.</p>
+
+          <div class="grid grid-cols-2 gap-2 bg-slate-950 rounded-xl p-2.5 border border-slate-800">
+            <!-- Anterior Silhouette -->
+            <div class="flex flex-col items-center">
+              <span class="text-[10px] font-bold uppercase text-slate-400 mb-1">Anterior</span>
+              <svg viewBox="0 0 180 410" class="w-full max-w-[145px] h-auto">
+                <g fill="#1e293b" stroke="#334155" stroke-width="1.2">
+                  <circle cx="90" cy="28" r="17" />
+                  <rect x="81" y="44" width="18" height="14" rx="4" />
+                  <path d="M52,62 C52,56 128,56 128,62 L122,145 L116,195 L64,195 L58,145 Z" />
+                  <path d="M52,64 L34,115 L24,175 L35,178 L48,125 L57,86 Z" />
+                  <path d="M128,64 L146,115 L156,175 L145,178 L132,125 L123,86 Z" />
+                  <path d="M64,195 L58,285 L62,375 L76,375 L84,285 L88,212 L92,212 L96,285 L104,375 L118,375 L122,285 L116,195 Z" />
+                </g>
+                <g class="muscle-hotspot" data-muscle="deltoids" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M53,61 C42,64 38,76 42,88 L54,82 Z" /><path d="M127,61 C138,64 142,76 138,88 L126,82 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="pectoralis" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M58,66 L88,68 L88,98 C75,101 61,96 57,86 Z" /><path d="M122,66 L92,68 L92,98 C105,101 119,96 123,86 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="biceps" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><ellipse cx="43" cy="107" rx="6" ry="16" transform="rotate(14 43 107)" /><ellipse cx="137" cy="107" rx="6" ry="16" transform="rotate(-14 137 107)" /></g>
+                <g class="muscle-hotspot" data-muscle="forearms" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M35,127 L44,130 L36,170 L27,168 Z" /><path d="M145,127 L136,130 L144,170 L153,168 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="abs" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><rect x="74" y="104" width="32" height="78" rx="6" /></g>
+                <g class="muscle-hotspot" data-muscle="quadriceps" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M64,200 L86,206 L83,275 L61,275 Z" /><path d="M116,200 L94,206 L97,275 L119,275 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="calves" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M60,295 L72,295 L70,355 L62,355 Z" /><path d="M120,295 L108,295 L110,355 L118,355 Z" /></g>
+              </svg>
+            </div>
+
+            <!-- Posterior Silhouette -->
+            <div class="flex flex-col items-center">
+              <span class="text-[10px] font-bold uppercase text-slate-400 mb-1">Posterior</span>
+              <svg viewBox="0 0 180 410" class="w-full max-w-[145px] h-auto">
+                <g fill="#1e293b" stroke="#334155" stroke-width="1.2">
+                  <circle cx="90" cy="28" r="17" />
+                  <rect x="81" y="44" width="18" height="14" rx="4" />
+                  <path d="M52,62 C52,56 128,56 128,62 L122,145 L116,195 L64,195 L58,145 Z" />
+                  <path d="M52,64 L34,115 L24,175 L35,178 L48,125 L57,86 Z" />
+                  <path d="M128,64 L146,115 L156,175 L145,178 L132,125 L123,86 Z" />
+                  <path d="M64,195 L58,285 L62,375 L76,375 L84,285 L88,212 L92,212 L96,285 L104,375 L118,375 L122,285 L116,195 Z" />
+                </g>
+                <g class="muscle-hotspot" data-muscle="traps" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><polygon points="82,50 98,50 116,72 90,118 64,72" /></g>
+                <g class="muscle-hotspot" data-muscle="deltoids" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M53,61 C42,64 38,76 42,88 L54,82 Z" /><path d="M127,61 C138,64 142,76 138,88 L126,82 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="lats" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M57,86 L74,104 L86,154 L65,148 Z" /><path d="M123,86 L106,104 L94,154 L115,148 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="triceps" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><ellipse cx="42" cy="107" rx="6" ry="16" transform="rotate(14 42 107)" /><ellipse cx="138" cy="107" rx="6" ry="16" transform="rotate(-14 138 107)" /></g>
+                <g class="muscle-hotspot" data-muscle="forearms" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M35,127 L44,130 L36,170 L27,168 Z" /><path d="M145,127 L136,130 L144,170 L153,168 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="gluteals" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><rect x="63" y="162" width="26" height="36" rx="10" /><rect x="91" y="162" width="26" height="36" rx="10" /></g>
+                <g class="muscle-hotspot" data-muscle="hamstrings" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><path d="M63,204 L85,204 L82,276 L61,276 Z" /><path d="M117,204 L95,204 L98,276 L119,276 Z" /></g>
+                <g class="muscle-hotspot" data-muscle="calves" fill="rgba(239,68,68,0.3)" stroke="#ef4444"><ellipse cx="69" cy="322" rx="8" ry="28" /><ellipse cx="111" cy="322" rx="8" ry="28" /></g>
+              </svg>
+            </div>
+          </div>
+
+          <div id="anatomyPills" class="flex flex-wrap gap-1.5 mt-3"></div>
+        </aside>
+
+        <div id="anatomyCardsList" class="lg:col-span-8 space-y-4"></div>
+      </div>
+    </section>
+
+    <!-- =================================================================== -->
+    <!-- TAB 4: WARM-UP, HINTS, VARIABLES & FAQ GUIDE                        -->
+    <!-- =================================================================== -->
+    <section id="tab-guide" class="main-section hidden space-y-6 animate-fade">
+
+      <!-- Interactive Primary Lift Warm-Up Pyramid Calculator (Page 30) -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-5 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-red-400">Pages 29–31 • Warm-Up Protocol</span>
+            <h2 class="text-lg font-extrabold text-white mt-0.5">Primary Lift Loading Pyramid Calculator</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <label for="warmupTargetInput" class="text-xs font-bold text-slate-300">Target Working Weight:</label>
+            <input id="warmupTargetInput" type="number" value="100" class="w-24 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-sm font-extrabold text-white focus:outline-none focus:border-red-500" />
+          </div>
+        </div>
+
+        <div id="warmupPyramidGrid" class="grid grid-cols-2 sm:grid-cols-5 gap-2.5"></div>
+
+        <!-- General Warm-Up Protocol Checklist (Page 31) -->
+        <div class="pt-3 border-t border-slate-800">
+          <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2.5">Pre-Session General Warm-Up Protocol (10–15 Mins)</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">1. Low-Intensity Cardio:</strong> <span class="text-slate-300">5–10 min (100–135 BPM)</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">2. Foam Rolling / Ball:</strong> <span class="text-slate-300">2–3 min on tight quads, lats, calves, pecs</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">3. Front/Back Leg Swing:</strong> <span class="text-slate-300">2 sets × 12 reps each leg</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">4. Side/Side Leg Swing:</strong> <span class="text-slate-300">2 sets × 12 reps each leg</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">5. Standing Glute Squeeze:</strong> <span class="text-slate-300">2 sets × 15 sec maximal squeeze</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">6. Prone Trap Raise:</strong> <span class="text-slate-300">2 sets × 15 reps (mid-back MMC)</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">7. Cable External Rotation:</strong> <span class="text-slate-300">2 sets × 15 reps each side</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">8. Cable Internal Rotation:</strong> <span class="text-slate-300">2 sets × 15 reps each side</span></div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5"><strong class="text-white">9. Overhead Shrug:</strong> <span class="text-slate-300">2 sets × 15 reps (squeeze traps at top)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Key Hints, Training Variables & Post-Week 9 Guide (Pages 8–12, 60–73) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="rounded-2xl bg-[#111827] border border-slate-800 p-5 shadow-xl space-y-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-amber-400">Pages 8–11, 60–61 • Progression &amp; RPE</span>
+          <h3 class="text-base font-extrabold text-white">Wave Loading, Double Progression &amp; After Week 9</h3>
+          <ul class="space-y-2 text-xs text-slate-300 leading-relaxed">
+            <li><strong class="text-white">• 3-Week Wave Loading:</strong> Weeks 1, 4, and 7 are "mini-deloads" (RPE 7–8). Weeks 2, 5, 8 build effort, and Weeks 3, 6, 9 peak (RPE 9–10).</li>
+            <li><strong class="text-white">• Double Progression (+2.5% 1RM):</strong> Primary lifts add 1 rep per week (e.g., 4 → 5 → 6 reps), then increase load by ~2.5% 1RM at the start of the next wave.</li>
+            <li><strong class="text-white">• RPE / RIR Scale:</strong> RPE 10 = Failure (0 reps left) • RPE 9 = 1 rep left • RPE 8 = 2 reps left • RPE 7 = 3 reps left.</li>
+            <li><strong class="text-white">• What To Do After Week 9:</strong> Either repeat the 9-week block from Week 1 with +2.5% updated 1RMs, or transition into Jeff Nippard’s <em>Push/Pull/Legs Hypertrophy Program</em>.</li>
+          </ul>
+        </div>
+
+        <div class="rounded-2xl bg-[#111827] border border-slate-800 p-5 shadow-xl space-y-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">Pages 62–73 • Execution, Volume &amp; Nutrition</span>
+          <h3 class="text-base font-extrabold text-white">Form Cues, Weekly Volume &amp; Recovery Hints</h3>
+          <ul class="space-y-2 text-xs text-slate-300 leading-relaxed">
+            <li><strong class="text-white">• Controlling the Negative:</strong> Aim for a controlled 1–2s eccentric and 1–2s concentric on secondary/tertiary lifts; explosive concentric on primary lifts.</li>
+            <li><strong class="text-white">• Breathing &amp; Valsalva:</strong> Inhale during the eccentric (lowering) and exhale during the concentric (lifting). Use the Valsalva maneuver cautiously on heavy compounds.</li>
+            <li><strong class="text-white">• Mind-Muscle Connection (MMC):</strong> Focus externally on whole-body movement during heavy squats/bench/deadlifts; use internal muscle squeezing on isolations.</li>
+            <li><strong class="text-white">• Weekly Volume &amp; Diet:</strong> 10–20 sets per muscle/week is optimal. Eat in a slight caloric surplus with <strong>0.8–1.0 g/lb protein</strong>; keep cardio to 1–4 low-intensity 20–30m sessions if cutting.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Searchable 16-Question FAQ Accordion (Pages 24–28) -->
+      <div class="rounded-2xl bg-[#111827] border border-slate-800 p-5 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-wider text-red-400">Pages 24–28 • Official Manual Q&amp;A</span>
+            <h3 class="text-base font-extrabold text-white">Frequently Asked Questions (16 Answers)</h3>
+          </div>
+          <input id="faqSearchInput" type="text" placeholder="Filter FAQs..." class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-red-500" />
+        </div>
+        <div id="faqAccordionList" class="space-y-2"></div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Floating Rest Timer Drawer -->
+  <div id="timerDrawer" class="fixed bottom-20 sm:bottom-5 right-3 sm:right-6 z-40 hidden w-72 rounded-2xl bg-[#111827] border border-slate-700 p-4 shadow-2xl">
+    <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
+      <span class="text-xs font-extrabold uppercase tracking-wider text-red-400">Gym Rest Timer</span>
+      <button onclick="toggleTimerDrawer()" class="text-slate-400 hover:text-white text-xs font-bold px-1.5">✕</button>
+    </div>
+    <div class="text-center py-2">
+      <div id="timerDisplay" class="text-4xl font-black tracking-tight text-white font-mono">02:00</div>
+      <div id="timerStatusText" class="text-[11px] text-slate-400 mt-1">Select duration or press Start</div>
+    </div>
+    <div class="grid grid-cols-3 gap-1.5 my-3">
+      <button onclick="setTimerSeconds(30)" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">30s</button>
+      <button onclick="setTimerSeconds(60)" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">60s</button>
+      <button onclick="setTimerSeconds(90)" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">90s</button>
+      <button onclick="setTimerSeconds(120)" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">2 min</button>
+      <button onclick="setTimerSeconds(180)" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">3 min</button>
+      <button onclick="setTimerSeconds(240)" class="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">4 min</button>
+    </div>
+    <div class="flex gap-2">
+      <button id="timerStartPauseBtn" onclick="toggleTimerRun()" class="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold transition">Start</button>
+      <button onclick="resetTimer()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition">Reset</button>
+    </div>
+  </div>
+
+  <!-- Mobile Bottom Navigation Bar (iPhone App Style) -->
+  <nav class="sm:hidden fixed bottom-0 inset-x-0 z-30 bg-[#0d1320]/95 backdrop-blur-md border-t border-slate-800 safe-bottom">
+    <div class="grid grid-cols-4 gap-1 px-2 pt-2">
+      <button data-main-tab="tracker" class="mobile-nav-btn active flex flex-col items-center py-1.5 rounded-xl text-red-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+        <span class="text-[10px] font-bold mt-0.5">Tracker</span>
+      </button>
+      <button data-main-tab="substitutions" class="mobile-nav-btn flex flex-col items-center py-1.5 rounded-xl text-slate-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+        <span class="text-[10px] font-semibold mt-0.5">Subs/Weak</span>
+      </button>
+      <button data-main-tab="anatomy" class="mobile-nav-btn flex flex-col items-center py-1.5 rounded-xl text-slate-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+        <span class="text-[10px] font-semibold mt-0.5">Anatomy</span>
+      </button>
+      <button data-main-tab="guide" class="mobile-nav-btn flex flex-col items-center py-1.5 rounded-xl text-slate-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <span class="text-[10px] font-semibold mt-0.5">Guide/FAQ</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    // =========================================================================
+    // 1. GENERATE PNG APPLE-TOUCH-ICON ON CANVAS FOR IPHONE HOME SCREEN
+    // =========================================================================
+    (function generateAppleTouchIcon() {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 180;
+        canvas.height = 180;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, 180, 180);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(10, 10, 160, 160);
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 10;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(38, 82); ctx.lineTo(142, 82);
+        ctx.moveTo(50, 58); ctx.lineTo(50, 106);
+        ctx.moveTo(38, 66); ctx.lineTo(38, 98);
+        ctx.moveTo(130, 58); ctx.lineTo(130, 106);
+        ctx.moveTo(142, 66); ctx.lineTo(142, 98);
+        ctx.stroke();
+        ctx.fillStyle = '#ef4444';
+        ctx.font = '900 22px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('UPPER/LOWER', 90, 145);
+        document.getElementById('appleTouchIcon').href = canvas.toDataURL('image/png');
+      } catch (e) {}
+    })();
+
+    // =========================================================================
+    // 2. VIDEO LINKS & COMPLETE SUBSTITUTIONS DIRECTORY (PAGES 74–82)
+    // =========================================================================
+    const VIDEO_MAP = {
+      'Back Squat': 'https://youtu.be/bEv6CCg2BC8?t=147',
+      'Eccentric-Accentuated Stiff-Leg Deadlift': 'https://www.youtube.com/watch?v=X-uKkAukJVA',
+      'Dumbbell Walking Lunge': 'https://youtu.be/htDXu61MPio?t=536',
+      'A1: Seated Leg Curl': 'https://youtu.be/2CMmuH4qJh0',
+      'A2: Cable Pull-Through': 'https://www.youtube.com/watch?v=NV80POpLsQU',
+      'Eccentric-Accentuated/Constant-Tension Standing Calf Raise': 'https://youtu.be/e_48W0vlU58?t=162',
+      'Standing Calf Raise': 'https://youtu.be/e_48W0vlU58?t=162',
+      'Constant-Tension Seated Calf Raise': 'https://youtu.be/e_48W0vlU58?t=162',
+      'Cable Crunch': 'https://youtu.be/2RrGnjxSsiA?t=124',
+      'Barbell Bench Press': 'https://youtu.be/vcBig73ojpE?t=134',
+      'Lat Pulldown': 'https://youtu.be/vcBig73ojpE?t=150',
+      'Barbell Overhead Press': 'https://youtu.be/vcBig73ojpE?t=121',
+      'Chest-Supported T-Bar Row': 'https://youtu.be/160n9FBX84s',
+      'Pause Dumbbell Incline Press': 'https://www.youtube.com/watch?v=p2t9daxLpB8',
+      'Myo Reps Floor Skull Crusher': 'https://youtu.be/vcBig73ojpE?t=153',
+      'Deadlift': 'https://youtu.be/vcBig73ojpE?t=175',
+      'Barbell Hip Thrust': 'https://youtu.be/vcBig73ojpE?t=97',
+      'Unilateral Eccentric-Overloaded Leg Extension': 'https://youtu.be/7Pep2_4nhgE?t=578',
+      'Constant-Tension Lying Leg Curl': 'https://www.youtube.com/watch?v=e_48W0vlU58',
+      'Wide-Grip Pull-Up': 'https://youtu.be/vcBig73ojpE?t=17',
+      'Barbell Incline Press': 'https://youtu.be/vcBig73ojpE?t=475',
+      'Pendlay Row/Barbell Bent Over Row': 'https://youtu.be/vcBig73ojpE?t=185',
+      'A1: Cable Flye 21s': 'https://www.youtube.com/watch?v=-ElhKMDSjBY',
+      'A2: Face Pull': 'https://youtu.be/vcBig73ojpE?t=230',
+      'Machine Lateral Raise': 'https://www.youtube.com/watch?v=0o07iGKUarl',
+      'Supinated Dumbbell Curl': 'https://youtu.be/vcBig73ojpE?t=487',
+      'Deficit Deadlift': 'https://youtu.be/vcBig73ojpE?t=369',
+      'Leg Press': 'https://youtu.be/vcBig73ojpE?t=241',
+      'Hanging Leg Raise': 'https://youtu.be/vcBig73ojpE?t=247',
+      'Eccentric-Accentuated Cable Row': 'https://youtu.be/vcBig73ojpE?t=273',
+      'Machine Chest Press': 'https://youtu.be/vcBig73ojpE?t=240',
+      'Cable Triceps Kickback': 'https://youtu.be/vcBig73ojpE?t=327',
+      'Bulgarian Split Squat': 'https://youtu.be/htDXu61MPio',
+      'A1: Leg Extension': 'https://youtu.be/vcBig73ojpE?t=202',
+      'A2: Leg Curl': 'https://www.youtube.com/watch?v=e_48W0vlU58',
+      'Machine Hip Abduction': 'https://youtu.be/zfUWbpdjczg',
+      'Dumbbell Row': 'https://youtu.be/vcBig73ojpE?t=116',
+      'Pec Deck': 'https://youtu.be/vcBig73ojpE?t=151',
+      'Dumbbell Reverse Flye': 'https://youtu.be/vcBig73ojpE?t=230',
+      'Dumbbell Front Raise/Lateral Raise': 'https://youtu.be/vcBig73ojpE?t=230',
+      'EZ Bar Curl 21s': 'https://www.youtube.com/watch?v=Dd0t5UOCEUc',
+      'Knee-Banded Leg Press': 'https://youtu.be/vcBig73ojpE?t=270',
+      'Sliding Leg Curl': 'https://youtu.be/vcBig73ojpE?t=247',
+      'Plank': 'https://youtu.be/vcBig73ojpE?t=111',
+      'Supinated Lat Pulldown': 'https://youtu.be/vcBig73ojpE?t=316',
+      'Machine High Row': 'https://www.youtube.com/watch?v=QH2s6F-oVNM',
+      'Push-Up': 'https://youtu.be/vcBig73ojpE?t=715',
+      'Eccentric-Overloaded Rope Overhead Triceps Extension': 'https://youtu.be/qIW3z-ydg-M',
+      'Dumbbell Step-Up': 'https://youtu.be/vcBig73ojpE?t=745',
+      'Reverse Hyper': 'https://youtu.be/3d9W--eUcl?t=89',
+      'Single-Leg Leg Extension': 'https://youtu.be/7Pep2_4nhgE?t=573',
+      'Cable Standing Hip Abduction': 'https://youtu.be/zfUWbpdjczg',
+      'Barbell Bent Over Row': 'https://youtu.be/vcBig73ojpE?t=119',
+      'Barbell Floor Press': 'https://youtu.be/vcBig73ojpE?t=153',
+      'Band Pull-Apart': 'https://youtu.be/vcBig73ojpE?t=230',
+      'Arnold Press': 'https://www.youtube.com/watch?v=zOpA1Op0zvc',
+      'Eccentric-Accentuated Hammer Curl': 'https://youtu.be/Kd3tbUnbueU'
+    };
+
+    const SUBSTITUTIONS_DB = [
+      // Lower Body (23)
+      { cat: 'lower', exercise: 'Back Squat', subs: ['Hack squat', 'Smith machine squat', 'Leg press + 15 reps of back extensions'] },
+      { cat: 'lower', exercise: 'Barbell 45° Hyperextension', subs: ['DB 45° hyper', 'Reverse hyper', 'Glute ham raise'] },
+      { cat: 'lower', exercise: 'Bulgarian Split Squat', subs: ['Smith machine reverse lunge', 'Dumbbell walking lunge'] },
+      { cat: 'lower', exercise: 'Cable Pull-Through', subs: ['Barbell RDL', 'Glute kickback'] },
+      { cat: 'lower', exercise: 'Conventional Deadlift', subs: ['Sumo deadlift'] },
+      { cat: 'lower', exercise: 'Deficit Deadlift', subs: ['Block pull (4")'] },
+      { cat: 'lower', exercise: 'Dumbbell Step-Up', subs: ['Walking lunge', 'Single-leg leg press'] },
+      { cat: 'lower', exercise: 'Dumbbell Walking Lunge', subs: ['Dumbbell step-up', 'Bulgarian split squat'] },
+      { cat: 'lower', exercise: 'Eccentric-Overloaded Leg Extension', subs: ['Leg extension', 'Sissy squat'] },
+      { cat: 'lower', exercise: 'Front Squat', subs: ['Goblet squat', 'Safety bar squat'] },
+      { cat: 'lower', exercise: 'Good Morning', subs: ['Barbell RDL', 'Reverse hyper', 'Glute ham raise'] },
+      { cat: 'lower', exercise: 'Barbell Hip Thrust', subs: ['Glute bridge', 'DB 45° hyperextension'] },
+      { cat: 'lower', exercise: 'Knee-Banded Leg Press', subs: ['Leg press', 'Knee-banded bodyweight squat'] },
+      { cat: 'lower', exercise: 'Leg Extension', subs: ['Sissy squat', 'Goblet squat'] },
+      { cat: 'lower', exercise: 'Leg Press', subs: ['Goblet squat', 'Walking lunge'] },
+      { cat: 'lower', exercise: 'Lying Leg Curl', subs: ['Seated leg curl', 'Sliding leg curl'] },
+      { cat: 'lower', exercise: 'Machine Hip Abduction', subs: ['Lateral band walk', 'Cable standing hip abduction'] },
+      { cat: 'lower', exercise: 'Reverse Hyper', subs: ['Glute ham raise', 'Cable pull-through', 'Glute kickback'] },
+      { cat: 'lower', exercise: 'Seated Leg Curl', subs: ['Lying leg curl', 'Sliding leg curl'] },
+      { cat: 'lower', exercise: 'Sliding Leg Curl', subs: ['Lying leg curl', 'Seated leg curl'] },
+      { cat: 'lower', exercise: 'Standing Calf Raise', subs: ['Seated calf raise', 'Leg press calf press'] },
+      { cat: 'lower', exercise: 'Constant-Tension Seated Calf Raise', subs: ['Standing calf raise', 'Leg press calf press'] },
+      { cat: 'lower', exercise: 'Eccentric-Accentuated Stiff-Leg Deadlift', subs: ['Barbell RDL', 'Block pull (4")'] },
+      // Abs (4)
+      { cat: 'abs', exercise: 'Cable Crunch', subs: ['Bodyweight crunch', 'V sit-up', 'Bicycle crunch'] },
+      { cat: 'abs', exercise: 'Hanging Leg Raise', subs: ["Captain's chair crunch", 'Reverse crunch'] },
+      { cat: 'abs', exercise: 'Plank', subs: ['Pallof press', 'Hanging leg raise hold'] },
+      { cat: 'abs', exercise: 'Weighted Crunch', subs: ['Cable crunch', 'Dumbbell loaded crunch'] },
+      // Upper Body (29)
+      { cat: 'upper', exercise: 'Arnold Press', subs: ['Dumbbell seated shoulder press', 'Machine shoulder press'] },
+      { cat: 'upper', exercise: 'Barbell Bench Press', subs: ['Dumbbell press', 'Machine chest press', 'Smith machine bench press'] },
+      { cat: 'upper', exercise: 'Barbell Close-Grip Bench Press', subs: ['Floor press', 'Dumbbell close-grip bench press'] },
+      { cat: 'upper', exercise: 'Barbell Incline Press', subs: ['Dumbbell incline press', 'Machine incline press'] },
+      { cat: 'upper', exercise: 'Barbell Overhead Press', subs: ['Seated barbell overhead press', 'Dumbbell seated shoulder press'] },
+      { cat: 'upper', exercise: 'Barbell Push Press', subs: ['Barbell overhead press', 'Machine shoulder press'] },
+      { cat: 'upper', exercise: 'Cable Close-Grip Row', subs: ['Cable wide grip row', 'Dumbbell row'] },
+      { cat: 'upper', exercise: 'A1: Cable Flye 21s', subs: ['Cable flye', 'Dumbbell flye', 'Pec deck'] },
+      { cat: 'upper', exercise: 'Cable Triceps Kickback', subs: ['V-bar pressdown', 'Cable kickback'] },
+      { cat: 'upper', exercise: 'Cable Upright Row', subs: ['Machine lateral raise', 'Face pull'] },
+      { cat: 'upper', exercise: 'California Press', subs: ['JM press', 'Pin press', 'Skull crusher'] },
+      { cat: 'upper', exercise: 'Chest-Supported T-Bar Row', subs: ['Chest-supported row', 'Cable single-arm row'] },
+      { cat: 'upper', exercise: 'Dip', subs: ['Assisted dip', 'Machine dip', 'Close-grip bench press'] },
+      { cat: 'upper', exercise: 'Dumbbell Row', subs: ['Cable single-arm row', 'Dumbbell chest-supported row'] },
+      { cat: 'upper', exercise: 'EZ Bar Curl 21s', subs: ['EZ bar curl', 'Dumbbell curl 21s', 'Cable curl 21s'] },
+      { cat: 'upper', exercise: 'Myo Reps Floor Skull Crusher', subs: ['EZ bar skull crusher', 'Floor press', 'Pin press', 'JM press'] },
+      { cat: 'upper', exercise: 'Eccentric-Accentuated Hammer Curl', subs: ['EZ bar pronated curl', 'Rope hammer curl'] },
+      { cat: 'upper', exercise: 'Lat Pulldown', subs: ['Pull-up', 'Supinated pulldown'] },
+      { cat: 'upper', exercise: 'Machine Chest Press', subs: ['Dumbbell press', 'Push-up'] },
+      { cat: 'upper', exercise: 'Eccentric-Accentuated Cable Row', subs: ['Machine chest-supported row', 'Dumbbell chest-supported row'] },
+      { cat: 'upper', exercise: 'Machine High Row', subs: ['Dumbbell chest-supported row', 'Cable seated row'] },
+      { cat: 'upper', exercise: 'Machine Lateral Raise', subs: ['Dumbbell lateral raise', 'Cable lateral raise'] },
+      { cat: 'upper', exercise: 'Wide-Grip Pull-Up', subs: ['Neutral-grip pulldown', 'Chin-up', 'Lat pulldown'] },
+      { cat: 'upper', exercise: 'Pause Dumbbell Incline Press', subs: ['Pause barbell incline press', 'Deficit push-up'] },
+      { cat: 'upper', exercise: 'Pec Deck', subs: ['Cable flye', 'Dumbbell flye'] },
+      { cat: 'upper', exercise: 'Pendlay Row/Barbell Bent Over Row', subs: ['Seated cable row', 'Machine T-bar row'] },
+      { cat: 'upper', exercise: 'Barbell Bent Over Row', subs: ['Seated cable row', 'Machine T-bar row', 'Chest-supported row'] },
+      { cat: 'upper', exercise: 'Push-Up', subs: ['Dumbbell floor press', 'Machine chest press'] },
+      { cat: 'upper', exercise: 'Eccentric-Overloaded Rope Overhead Triceps Extension', subs: ['V-bar pressdown', 'Rope triceps extension'] },
+      { cat: 'upper', exercise: 'Supinated Dumbbell Curl', subs: ['Concentration curl', 'Preacher curl'] },
+      { cat: 'upper', exercise: 'Supinated Lat Pulldown', subs: ['Chin-up', 'Pronated lat pulldown'] },
+      { cat: 'upper', exercise: 'Barbell Floor Press', subs: ['Dumbbell floor press', 'Close-grip bench press'] }
+    ];
+
+    const WEAK_POINT_OPTIONS = {
+      upper: {
+        'Chest': ['Cable Flye Dropset', 'Cable Flye 21s'],
+        'Lats': ['Pronated/Supinated Pulldown (8/8)', 'Cable Pull-Over Dropset', 'Elbows Out/Elbows In Row (8/8)'],
+        'Biceps': ['Eccentric-Overloaded Dumbbell Curl', 'Pronated/Supinated EZ Bar Curl (8/8)', 'Asymmetrical DB Curl'],
+        'Triceps': ["Cable Kickback 21's", 'California Press', 'Forced Negative Skull Crusher'],
+        'Deltoids': ['Cable Lateral Raise 21s', 'Shrug/Lateral Raise Superset', 'Front/Lateral/Bent Rear Delt Tri-Set'],
+        'Traps': ['Barbell Shrug', "T's/Y's/I's", 'Face Pull/Elbows Out Row'],
+        'Forearms': ['Hammer Curl', 'Pronated EZ Bar Curl', 'Dumbbell Wrist Curl', 'Farmer Carry'],
+        'Neck': ['Plate Neck Flexion', 'Plate Lateral Flexion']
+      },
+      lower: {
+        'Quads': ['Leg Extension', 'Unilateral Leg Press', 'Sissy Squat', 'Constant-Tension Goblet Squat'],
+        'Hamstrings': ['Lying Leg Curl', 'Glute-Ham Raise', 'Swiss Ball Leg Curl', 'Enhanced-Eccentric Seated Leg Curl'],
+        'Glutes': ['Banded Hip Thrust', 'Constant-Tension Hip Thrust', 'Walking Lunge', 'Machine Hip Abduction Dropset'],
+        'Calves': ['Standing Calf Raise', 'Seated Calf Raise'],
+        'Abs': ['Bicycle Crunch', 'Hanging Leg Raise', 'V Sit-Up']
+      }
+    };
+
+    // =========================================================================
+    // 3. COMPLETE 9-WEEK PROGRAM DATA (EXACTLY MATCHING EXCEL & PDF TABLES)
+    // =========================================================================
+    function buildProgramWeeks() {
+      const weeks = {};
+      for (let w = 1; w <= 9; w++) {
+        if (w <= 3) {
+          // WAVE 1 (Weeks 1, 2, 3)
+          const sqReps = w === 1 ? '4' : w === 2 ? '5' : '6';
+          const sldlRpe = w === 1 ? '7' : w === 2 ? '8' : '9';
+          const lungeRpe = w === 3 ? '9' : '8';
+          const calfRpe = w === 3 ? '9' : '8';
+
+          const lower1 = [
+            { name: 'Back Squat', warmup: 3, sets: 4, reps: sqReps, pct: 0.75, lift: 'squat', rest: '3-4 MIN', rpe: 'N/A', note: 'Sit back and down, 15° toe flare, drive your knees out laterally' },
+            { name: 'Eccentric-Accentuated Stiff-Leg Deadlift', warmup: 2, sets: 3, reps: '10', pct: null, rest: '2-3 MIN', rpe: sldlRpe, note: '4-second lowering phase. Keep your hips high' },
+            { name: 'Dumbbell Walking Lunge', warmup: 0, sets: 3, reps: '15', pct: null, rest: '2-3 MIN', rpe: lungeRpe, note: '15 steps per leg' },
+            { name: 'A1: Seated Leg Curl', warmup: 0, sets: 3, reps: '15', pct: null, rest: '0 MIN', rpe: '9', note: 'Focus on squeezing your hamstrings (Superset into A2)' },
+            { name: 'A2: Cable Pull-Through', warmup: 0, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on squeezing your glutes' },
+            { name: 'Eccentric-Accentuated/Constant-Tension Standing Calf Raise', warmup: 0, sets: 4, reps: '6/6', pct: null, rest: '1-2 MIN', rpe: calfRpe, note: 'First 6 reps 3-second lowering phase, last 6 reps no stop between reps' }
+          ];
+          if (w === 1 || w === 2) {
+            lower1.push({ name: 'Cable Crunch', warmup: 0, sets: 4, reps: '30', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Round your back as you crunch' });
+          }
+
+          const bpReps = w === 1 ? '6' : w === 2 ? '7' : '8';
+          const latRpe = w === 3 ? '9' : '8';
+          const ohpSets = w === 1 ? 3 : 4;
+          const ohpRpe = w === 3 ? '8' : '7';
+          const incRpe = w === 1 ? '7' : w === 2 ? '8' : '9';
+
+          const upper1 = [
+            { name: 'Barbell Bench Press', warmup: 3, sets: 4, reps: bpReps, pct: 0.70, lift: 'bench', rest: '2-3 MIN', rpe: 'N/A', note: 'Elbows at a 45° angle. Squeeze shoulder blades and stay firm on bench' },
+            { name: 'Lat Pulldown', warmup: 2, sets: 3, reps: '10', pct: null, rest: '2-3 MIN', rpe: latRpe, note: 'Pull your elbows down and in' },
+            { name: 'Barbell Overhead Press', warmup: 2, sets: ohpSets, reps: '10', pct: null, rest: '2-3 MIN', rpe: ohpRpe, note: 'Squeeze your glutes to keep your torso upright' },
+            { name: 'Chest-Supported T-Bar Row', warmup: 1, sets: 3, reps: '12', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Squeeze shoulder blades together at the top, control the weight' },
+            { name: 'Pause Dumbbell Incline Press', warmup: 1, sets: 3, reps: '8', pct: null, rest: '2-3 MIN', rpe: incRpe, note: '3-second pause at bottom stretched position' },
+            { name: 'Myo Reps Floor Skull Crusher', warmup: 1, sets: 3, reps: '12', pct: null, rest: '1-2 MIN', rpe: '9', note: '8 reps, rest 5 seconds, 2 reps, rest 5 seconds, 2 reps' },
+            { name: 'Upper Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'upper' }
+          ];
+
+          const dlSets = w === 1 ? 2 : w === 2 ? 3 : 4;
+          const htRpe = w === 3 ? '9' : '8';
+          const lcRpe = w === 3 ? '10' : '8';
+
+          const lower2 = [
+            { name: 'Deadlift', warmup: 3, sets: dlSets, reps: '5', pct: 0.80, lift: 'deadlift', rest: '3-5 MIN', rpe: 'N/A', note: 'Brace lats, chest tall, hips high, pull slack out of bar prior to lifting' },
+            { name: 'Back Squat', warmup: 3, sets: 3, reps: '8', pct: 0.70, lift: 'squat', rest: '3-4 MIN', rpe: 'N/A', note: 'Sit back and down, 15° toe flare, drive your knees out laterally' },
+            { name: 'Barbell Hip Thrust', warmup: 2, sets: 4, reps: '12', pct: null, rest: '2-3 MIN', rpe: htRpe, note: 'Squeeze your glutes at the top' },
+            { name: 'Unilateral Eccentric-Overloaded Leg Extension', warmup: 0, sets: 3, reps: '12', pct: null, rest: '1-2 MIN', rpe: '8', note: '12 reps each leg, bilateral concentric, unilateral eccentric' },
+            { name: 'Constant-Tension Lying Leg Curl', warmup: 0, sets: 3, reps: '20', pct: null, rest: '1-2 MIN', rpe: lcRpe, note: 'Flex your hamstrings continuously' },
+            { name: 'Lower Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'lower' }
+          ];
+          if (w === 2) {
+            lower2.push({ name: 'Cable Crunch', warmup: 0, sets: 4, reps: '30', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Round your back as you crunch' });
+          }
+
+          const puSets = w === 1 ? 3 : w === 2 ? 4 : 5;
+          const puRpe = w === 1 ? '7' : w === 2 ? '8' : '9';
+          const rowRpe = w === 1 ? '8' : '9';
+          const flyRpe = w === 3 ? '9' : '8';
+          const latRaiseSets = w === 3 ? 4 : 3;
+          const curlRpe = w === 1 ? '8' : '9';
+
+          const upper2 = [
+            { name: 'Wide-Grip Pull-Up', warmup: 1, sets: puSets, reps: '6', pct: null, rest: '2-3 MIN', rpe: puRpe, note: 'Pull your chest to the bar' },
+            { name: 'Barbell Incline Press', warmup: 2, sets: 4, reps: '8', pct: null, rest: '2-3 MIN', rpe: '7-8', note: 'Keep your elbows out' },
+            { name: 'Pendlay Row/Barbell Bent Over Row', warmup: 1, sets: 3, reps: '10/10', pct: null, rest: '2-3 MIN', rpe: rowRpe, note: '10 reps Pendlay row, 10 reps bent over row' },
+            { name: 'A1: Cable Flye 21s', warmup: 0, sets: 3, reps: '7/7/7', pct: null, rest: '0 MIN', rpe: flyRpe, note: '7 reps top half ROM, 7 reps bottom half ROM, 7 reps full ROM' },
+            { name: 'A2: Face Pull', warmup: 0, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: flyRpe, note: 'Focus on squeezing your shoulder blades together' },
+            { name: 'Machine Lateral Raise', warmup: 1, sets: latRaiseSets, reps: '12/12', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Dropset (12 reps + 12 lighter reps)' },
+            { name: 'Supinated Dumbbell Curl', warmup: 0, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: curlRpe, note: 'Supinate against the dumbbell' },
+            { name: 'Upper Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'upper' }
+          ];
+
+          weeks[w] = { wave: 1, lower1, upper1, lower2, upper2 };
+        } else if (w <= 6) {
+          // WAVE 2 (Weeks 4, 5, 6)
+          const sqReps = w === 4 ? '4' : w === 5 ? '5' : '6';
+          const lpRpe = w === 4 ? '7' : '8';
+          const calfRpe = w === 4 ? '8' : '9';
+          const hlrRpe = w === 6 ? '9' : '8';
+
+          const lower1 = [
+            { name: 'Back Squat', warmup: 3, sets: 4, reps: sqReps, pct: 0.775, lift: 'squat', rest: '3-4 MIN', rpe: 'N/A', note: 'Sit back and down, 15° toe flare, drive your knees out laterally' },
+            { name: 'Deficit Deadlift', warmup: 2, sets: 2, reps: '6', pct: 0.70, lift: 'deadlift', rest: '2-3 MIN', rpe: 'N/A', note: '2" deficit, can use 35 lb plates to create deficit' },
+            { name: 'Leg Press', warmup: 2, sets: 4, reps: '10', pct: null, rest: '2-3 MIN', rpe: lpRpe, note: 'Low foot positioning' },
+            { name: 'A1: Seated Leg Curl', warmup: 0, sets: 2, reps: '12', pct: null, rest: '0 MIN', rpe: '9', note: 'Focus on squeezing your hamstrings' },
+            { name: 'A2: Cable Pull-Through', warmup: 0, sets: 2, reps: '12', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on squeezing your glutes' },
+            { name: 'Constant-Tension Seated Calf Raise', warmup: 0, sets: 2, reps: '20', pct: null, rest: '1-2 MIN', rpe: calfRpe, note: 'Press onto your toes' },
+            { name: 'Hanging Leg Raise', warmup: 0, sets: 4, reps: '12', pct: null, rest: '1-2 MIN', rpe: hlrRpe, note: 'Flex your spine' }
+          ];
+
+          const bpReps = w === 4 ? '6' : w === 5 ? '7' : '8';
+          const ohpSets = w === 4 ? 3 : 4;
+          const ohpRpe = w === 6 ? '8' : '7';
+          const crowRpe = w === 4 ? '8' : '9';
+          const mcpRpe = w === 4 ? '7' : '8';
+
+          const upper1 = [
+            { name: 'Barbell Bench Press', warmup: 3, sets: 4, reps: bpReps, pct: 0.725, lift: 'bench', rest: '2-3 MIN', rpe: 'N/A', note: 'Elbows at a 45° angle. Squeeze shoulder blades and stay firm on bench' },
+            { name: 'Lat Pulldown', warmup: 2, sets: 3, reps: '8', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Pull your elbows down and in' },
+            { name: 'Barbell Overhead Press', warmup: 2, sets: ohpSets, reps: '8', pct: null, rest: '2-3 MIN', rpe: ohpRpe, note: 'Squeeze your glutes to keep your torso upright' },
+            { name: 'Eccentric-Accentuated Cable Row', warmup: 0, sets: 3, reps: '15', pct: null, rest: '2-3 MIN', rpe: crowRpe, note: '2-second lowering phase' },
+            { name: 'Machine Chest Press', warmup: 1, sets: 3, reps: '15', pct: null, rest: '2-3 MIN', rpe: mcpRpe, note: 'Focus on squeezing your chest' },
+            { name: 'Cable Triceps Kickback', warmup: 1, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on squeezing your triceps' },
+            { name: 'Upper Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'upper' }
+          ];
+
+          const dlSets = w === 4 ? 2 : w === 5 ? 3 : 4;
+          const leRpe = w === 6 ? '10' : '8';
+          const habRpe = w === 6 ? '9' : '8';
+
+          const lower2 = [
+            { name: 'Deadlift', warmup: 3, sets: dlSets, reps: '5', pct: 0.825, lift: 'deadlift', rest: '3-5 MIN', rpe: 'N/A', note: 'Brace lats, chest tall, hips high, pull slack out of bar prior to lifting' },
+            { name: 'Back Squat', warmup: 3, sets: 3, reps: '8', pct: 0.725, lift: 'squat', rest: '3-4 MIN', rpe: 'N/A', note: 'Sit back and down, 15° toe flare, drive your knees out laterally' },
+            { name: 'Bulgarian Split Squat', warmup: 2, sets: 3, reps: '15', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Elevate your back foot 12"' },
+            { name: 'A1: Leg Extension', warmup: 0, sets: 3, reps: '20', pct: null, rest: '0 MIN', rpe: leRpe, note: 'Flex your quads' },
+            { name: 'A2: Leg Curl', warmup: 0, sets: 2, reps: '20', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Flex your hamstrings' },
+            { name: 'Machine Hip Abduction', warmup: 0, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: habRpe, note: 'Squeeze your glutes' },
+            { name: 'Lower Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'lower' }
+          ];
+
+          const puSets = w === 4 ? 3 : w === 5 ? 4 : 5;
+          const puRpe = w === 4 ? '7' : w === 5 ? '8' : '9';
+          const dbRowRpe = w === 6 ? '9' : '8';
+          const pecRpe = w === 6 ? '9' : '8';
+          const revRpe = w === 6 ? '9' : '8';
+          const frSets = w === 6 ? 4 : 3;
+          const ezRpe = w === 4 ? '8' : w === 5 ? '9' : '10';
+
+          const upper2 = [
+            { name: 'Wide-Grip Pull-Up', warmup: 1, sets: puSets, reps: '6', pct: null, rest: '2-3 MIN', rpe: puRpe, note: 'Pull with your chest to the bar' },
+            { name: 'Barbell Incline Press', warmup: 2, sets: 4, reps: '8', pct: null, rest: '2-3 MIN', rpe: '7-8', note: 'Keep your elbows out' },
+            { name: 'Dumbbell Row', warmup: 1, sets: 3, reps: '12', pct: null, rest: '1-2 MIN', rpe: dbRowRpe, note: 'Brace onto a bench for support, pull your elbow against your side' },
+            { name: 'Pec Deck', warmup: 0, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: pecRpe, note: 'Squeeze your pecs' },
+            { name: 'Dumbbell Reverse Flye', warmup: 0, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: revRpe, note: 'Focus on squeezing your shoulder blades together' },
+            { name: 'Dumbbell Front Raise/Lateral Raise', warmup: 1, sets: frSets, reps: '15/15', pct: null, rest: '1-2 MIN', rpe: '9', note: '15 reps front raise, 15 reps lateral raise' },
+            { name: 'EZ Bar Curl 21s', warmup: 0, sets: 3, reps: '7/7/7', pct: null, rest: '1-2 MIN', rpe: ezRpe, note: '7 reps bottom half ROM, 7 reps top half ROM, 7 reps full ROM' },
+            { name: 'Upper Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'upper' }
+          ];
+
+          weeks[w] = { wave: 2, lower1, upper1, lower2, upper2 };
+        } else {
+          // WAVE 3 (Weeks 7, 8, 9)
+          const sqReps = w === 7 ? '4' : w === 8 ? '5' : '6';
+          const plankRpe = w === 9 ? '8' : '7';
+
+          const lower1 = [
+            { name: 'Back Squat', warmup: 3, sets: 4, reps: sqReps, pct: 0.80, lift: 'squat', rest: '3-4 MIN', rpe: 'N/A', note: 'Sit back and down, 15° toe flare, drive your knees out laterally' },
+            { name: 'Barbell Hip Thrust', warmup: 2, sets: 3, reps: '10', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Squeeze your glutes at the top' },
+            { name: 'Knee-Banded Leg Press', warmup: 2, sets: 3, reps: '20', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Keep your knees out against band' },
+            { name: 'Sliding Leg Curl', warmup: 0, sets: 2, reps: '15', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Flex your hamstrings' },
+            { name: 'Dumbbell Walking Lunge', warmup: 0, sets: 3, reps: '15', pct: null, rest: '2-3 MIN', rpe: '8', note: '15 steps per leg' },
+            { name: 'Standing Calf Raise', warmup: 1, sets: 3, reps: '10', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Press onto your toes' },
+            { name: 'Plank', warmup: 0, sets: 4, reps: '30 SEC', pct: null, rest: '1-2 MIN', rpe: plankRpe, note: 'Flex your abs and brace spine' }
+          ];
+
+          const bpReps = w === 7 ? '6' : w === 8 ? '7' : '8';
+          const ohpSets = w === 7 ? 3 : 4;
+          const ohpRpe = w === 9 ? '8' : '7';
+
+          const upper1 = [
+            { name: 'Barbell Bench Press', warmup: 3, sets: 4, reps: bpReps, pct: 0.75, lift: 'bench', rest: '2-3 MIN', rpe: 'N/A', note: 'Elbows at a 45° angle. Squeeze shoulder blades and stay firm on bench' },
+            { name: 'Supinated Lat Pulldown', warmup: 2, sets: 3, reps: '12', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Underhand grip, pull your elbows against your sides' },
+            { name: 'Barbell Overhead Press', warmup: 2, sets: ohpSets, reps: '6', pct: null, rest: '2-3 MIN', rpe: ohpRpe, note: 'Squeeze your glutes to keep your torso upright' },
+            { name: 'Machine High Row', warmup: 0, sets: 2, reps: '12', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Stretch your lats at the top' },
+            { name: 'Push-Up', warmup: 0, sets: 3, reps: 'AMRAP', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Squeeze your pecs (as many reps as possible with good form)' },
+            { name: 'Eccentric-Overloaded Rope Overhead Triceps Extension', warmup: 1, sets: 4, reps: '10', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Use your non-working arm to assist with the concentric' },
+            { name: 'Upper Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'upper' }
+          ];
+
+          const dlSets = w === 7 ? 2 : w === 8 ? 3 : 4;
+
+          const lower2 = [
+            { name: 'Deadlift', warmup: 3, sets: dlSets, reps: '5', pct: 0.85, lift: 'deadlift', rest: '3-5 MIN', rpe: 'N/A', note: 'Brace lats, chest tall, hips high, pull slack out of bar prior to lifting' },
+            { name: 'Back Squat', warmup: 3, sets: 3, reps: '8', pct: 0.75, lift: 'squat', rest: '3-4 MIN', rpe: 'N/A', note: 'Sit back and down, 15° toe flare, drive your knees out laterally' },
+            { name: 'Dumbbell Step-Up', warmup: 2, sets: 3, reps: '12', pct: null, rest: '0 MIN', rpe: '9', note: 'Set the box height to parallel' },
+            { name: 'Reverse Hyper', warmup: 0, sets: 3, reps: '15', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on squeezing your glutes' },
+            { name: 'Single-Leg Leg Extension', warmup: 0, sets: 2, reps: '12', pct: null, rest: '1-2 MIN', rpe: '8', note: '12 reps each leg' },
+            { name: 'Cable Standing Hip Abduction', warmup: 1, sets: 3, reps: '10', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Squeeze your glutes' },
+            { name: 'Lower Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'lower' }
+          ];
+
+          const puSets = w === 7 ? 3 : w === 8 ? 4 : 5;
+          const arnoldSets = w === 9 ? 4 : 3;
+
+          const upper2 = [
+            { name: 'Wide-Grip Pull-Up', warmup: 1, sets: puSets, reps: '6', pct: null, rest: '2-3 MIN', rpe: '7', note: 'Pull with your chest to the bar' },
+            { name: 'Barbell Incline Press', warmup: 2, sets: 4, reps: '8', pct: null, rest: '2-3 MIN', rpe: '7-8', note: 'Keep your elbows out' },
+            { name: 'Barbell Bent Over Row', warmup: 1, sets: 3, reps: '10', pct: null, rest: '2-3 MIN', rpe: '8', note: 'Pull to your upper abs' },
+            { name: 'Barbell Floor Press', warmup: 1, sets: 3, reps: '10', pct: null, rest: '2-3 MIN', rpe: '7', note: 'Focus on squeezing your chest' },
+            { name: 'Band Pull-Apart', warmup: 0, sets: 2, reps: '30', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Squeeze your shoulder blades together' },
+            { name: 'Arnold Press', warmup: 1, sets: arnoldSets, reps: '15', pct: null, rest: '1-2 MIN', rpe: '8', note: 'Start with elbows in front & palms facing in; rotate palms forward as you press' },
+            { name: 'Eccentric-Accentuated Hammer Curl', warmup: 0, sets: 3, reps: '10', pct: null, rest: '1-2 MIN', rpe: '8', note: '3-second lowering phase' },
+            { name: 'Upper Body Weak Point 1', warmup: 0, sets: 3, reps: '15-20', pct: null, rest: '1-2 MIN', rpe: '9', note: 'Focus on mind-muscle connection', isWeakPoint: 'upper' }
+          ];
+
+          weeks[w] = { wave: 3, lower1, upper1, lower2, upper2 };
+        }
+      }
+      return weeks;
+    }
+
+    const PROGRAM_WEEKS = buildProgramWeeks();
+
+    // =========================================================================
+    // 4. ANATOMY & FAQ DATASETS
+    // =========================================================================
+    const MUSCLE_DATA = [
+      { id: 'quadriceps', name: 'Quadriceps', short: 'Quads', page: 'p. 14', heads: 'Vastus lateralis, vastus medialis, rectus femoris, vastus intermedius', action: 'Extend (straighten) the knee.', origin: 'Body of femur (vasti) & Ilium of hip bone (rectus femoris).', insertion: 'Tibial tuberosity.', exercises: ['Back Squat', 'Leg Press', 'Leg Extension', 'Dumbbell Walking Lunge', 'Bulgarian Split Squat', 'Knee-Banded Leg Press', 'Dumbbell Step-Up'] },
+      { id: 'hamstrings', name: 'Hamstrings', short: 'Hamstrings', page: 'p. 15', heads: 'Semimembranosus, semitendinosus, biceps femoris (long & short heads)', action: 'Flex the knee and extend the hip.', origin: 'Ischial tuberosity & linea aspera.', insertion: 'Tibia & fibula.', exercises: ['Eccentric-Accentuated Stiff-Leg Deadlift', 'Deadlift', 'Constant-Tension Lying Leg Curl', 'A1: Seated Leg Curl', 'A2: Cable Pull-Through', 'Deficit Deadlift', 'Sliding Leg Curl', 'Reverse Hyper'] },
+      { id: 'gluteals', name: 'Gluteals', short: 'Glutes', page: 'pp. 15–16', heads: 'Gluteus maximus, gluteus medius, gluteus minimus', action: 'Hip extension, hip abduction, external rotation & posterior pelvic tilt.', origin: 'Ilium, pelvis, sacrum, coccyx.', insertion: 'IT band, gluteal tuberosity & greater trochanter of femur.', exercises: ['Back Squat', 'Deadlift', 'Barbell Hip Thrust', 'Dumbbell Walking Lunge', 'A2: Cable Pull-Through', 'Machine Hip Abduction', 'Bulgarian Split Squat', 'Reverse Hyper', 'Cable Standing Hip Abduction'] },
+      { id: 'pectoralis', name: 'Pectoralis', short: 'Chest / Pecs', page: 'p. 17', heads: 'Pectoralis major (clavicular/upper & sternal/lower heads) & pectoralis minor', action: 'Adduct upper arm across body, internally rotate shoulder, aid shoulder flexion.', origin: 'Sternum, clavicle & 3rd–5th ribs.', insertion: 'Humerus & coracoid process.', exercises: ['Barbell Bench Press', 'Pause Dumbbell Incline Press', 'A1: Cable Flye 21s', 'Barbell Incline Press', 'Machine Chest Press', 'Barbell Floor Press', 'Push-Up', 'Pec Deck'] },
+      { id: 'lats', name: 'Latissimus Dorsi', short: 'Lats', page: 'pp. 18–19', heads: 'Broad fan-shaped back muscle from armpit to lower back', action: 'Extend and adduct the shoulder (pull upper arm down & elbows to mid-back).', origin: 'Iliac crest & thoracolumbar fascia.', insertion: 'Humerus.', exercises: ['Lat Pulldown', 'Pendlay Row/Barbell Bent Over Row', 'Wide-Grip Pull-Up', 'Chest-Supported T-Bar Row', 'Eccentric-Accentuated Cable Row', 'Supinated Lat Pulldown', 'Machine High Row', 'Barbell Bent Over Row'] },
+      { id: 'traps', name: 'Trapezius', short: 'Traps', page: 'pp. 18–19', heads: 'Upper, middle, and lower trapezius fibers', action: 'Elevate scapulae (shrug), retract scapulae (pinch shoulder blades), extend shoulder.', origin: 'Occipital bone & supraspinous ligaments.', insertion: 'Nuchal ligament, scapular spine & clavicle.', exercises: ['Wide-Grip Pull-Up', 'Pendlay Row/Barbell Bent Over Row', 'Machine High Row', 'A2: Face Pull', 'Dumbbell Row', 'Dumbbell Reverse Flye'] },
+      { id: 'biceps', name: 'Biceps & Brachialis', short: 'Biceps', page: 'p. 20', heads: 'Biceps brachii (long head, short head) & underlying brachialis', action: 'Flex the elbow and supinate the wrist (twist pinky upward).', origin: 'Coracoid process & supraglenoid tubercle.', insertion: 'Radial tuberosity.', exercises: ['Supinated Dumbbell Curl', 'Chest-Supported T-Bar Row', 'Eccentric-Accentuated Cable Row', 'Dumbbell Row', 'EZ Bar Curl 21s', 'Supinated Lat Pulldown', 'Machine High Row', 'Eccentric-Accentuated Hammer Curl'] },
+      { id: 'triceps', name: 'Triceps Brachii', short: 'Triceps', page: 'pp. 20–21', heads: 'Long head, medial head, and lateral head', action: 'Extend (straighten) the elbow.', origin: 'Infraglenoid tubercle & radial groove.', insertion: 'Olecranon process on ulna.', exercises: ['Barbell Bench Press', 'Pause Dumbbell Incline Press', 'Myo Reps Floor Skull Crusher', 'Machine Chest Press', 'Cable Triceps Kickback', 'Barbell Floor Press', 'Push-Up', 'Eccentric-Overloaded Rope Overhead Triceps Extension'] },
+      { id: 'deltoids', name: 'Deltoids', short: 'Shoulders', page: 'p. 21', heads: 'Anterior (front), lateral (side), and posterior (rear) deltoids', action: 'Shoulder flexion (front), abduction to sides (lateral), horizontal abduction (rear).', origin: 'Clavicle, acromion process & spine of scapula.', insertion: 'Deltoid tuberosity of humerus.', exercises: ['Barbell Bench Press', 'Machine Lateral Raise', 'Barbell Overhead Press', 'Dumbbell Front Raise/Lateral Raise', 'Pec Deck', 'Barbell Floor Press', 'Arnold Press', 'Band Pull-Apart'] },
+      { id: 'abs', name: 'Abdominals', short: 'Abs / Core', page: 'pp. 21–22', heads: 'Rectus abdominis ("6-pack"), obliques, transversus abdominis', action: 'Flex spine, rotate torso, and resist lumbar spinal extension.', origin: 'Crest of pubis.', insertion: 'Xiphoid process.', exercises: ['Cable Crunch', 'Hanging Leg Raise', 'Plank', 'Dumbbell Row'] },
+      { id: 'calves', name: 'Calves', short: 'Calves', page: 'p. 22', heads: 'Gastrocnemius (upper 2-headed) & Soleus (flat underlying muscle)', action: 'Plantarflex the ankle (point toes down).', origin: 'Lateral and medial condyle of femur.', insertion: 'Tendo calcaneus (Achilles tendon).', exercises: ['Eccentric-Accentuated/Constant-Tension Standing Calf Raise', 'Constant-Tension Seated Calf Raise', 'Standing Calf Raise'] },
+      { id: 'forearms', name: 'Forearms', short: 'Forearms', page: 'p. 23', heads: 'Posterior wrist extensors/brachioradialis & anterior wrist flexors', action: 'Wrist flexion/extension, supination, and pronated elbow flexion.', origin: 'Lateral epicondyle of humerus & common flexor tendon.', insertion: 'Fingers & carpals/metacarpals.', exercises: ['Wide-Grip Pull-Up', 'Deadlift', 'Eccentric-Accentuated Hammer Curl', 'Supinated Dumbbell Curl'] }
+    ];
+
+    const FAQ_DATA = [
+      { q: '1. How do I know if I am progressing?', a: 'Because of the relationship between strength gain and muscle gain, the main metric is strength progression. Log every workout in the tracker so you can beat your previous numbers over time, alongside taking progress photos every 4–6 weeks.' },
+      { q: '2. How much muscle can I expect to gain?', a: 'Early intermediates (1–2 years lifting) can expect ~0.5–1 lb of muscle/month (6–12 lbs/year). Intermediate-advanced trainees can expect ~0.25–0.5 lb/month (3–6 lbs/year). Women can divide estimates roughly in half.' },
+      { q: '3. What gym equipment should I use?', a: 'Equipment is optional, but a 10mm lever/prong belt, knee sleeves, squat shoes, and lifting straps can help safely overload heavy movements.' },
+      { q: '4. When should I wear a lifting belt?', a: 'Wear a lifting belt on hard working sets of squats, bench presses, deadlifts, and overhead presses—not on light warm-up sets.' },
+      { q: '5. I am not getting sore from my workouts. Is the program working?', a: 'Yes! DOMS (delayed onset muscle soreness) is not required for hypertrophy. Reduced soreness over time actually indicates positive recovery and adaptation.' },
+      { q: '6. I am getting very sore. Should I skip the gym?', a: 'Add 3–5 minutes of foam rolling post-workout. Training with mild soreness is fine after a thorough warm-up, but skip/delay a movement if pain prevents full range of motion.' },
+      { q: '7. Should I eat in a caloric deficit, maintenance, or surplus?', a: 'A slight caloric surplus yields optimal muscle and strength gains. If fat loss is your primary goal, use a moderate deficit while keeping protein at 0.8–1.0 g/lb bodyweight.' },
+      { q: '8. The warm-up isn’t enough for me. Can I add to it?', a: 'Yes, you can add extra mobility or pyramid sets, keeping the total warm-up under 10–20 minutes so you do not fatigue yourself before working sets.' },
+      { q: '9. Why is there such little exercise variation week to week?', a: 'Keeping exercises consistent within each 3-week wave maximizes neurological mastery and progressive overload. Exercises rotate between Waves 1, 2, and 3.' },
+      { q: '10 & 11. Isn’t this too much or too little volume?', a: 'Volume accumulates across each wave (10–20 sets/muscle/week optimal). Quality of execution and proximity to failure matter far more than chasing junk volume.' },
+      { q: '12. What do I do after I finish the 9-week program?', a: 'Either repeat the 9-week block from Week 1 with +2.5% increased 1RM numbers, or transition into Jeff Nippard’s Push/Pull/Legs Hypertrophy Program.' },
+      { q: '13. What are the tracking boxes in the program for?', a: 'They are designed for logging your working weights, reps, and Last Set RPE (LSRPE) every week—built directly into Tab 1 of this app!' },
+      { q: '14. I can’t do an exercise. What should I replace it with?', a: 'Tap the "Substitute" button on any exercise in the tracker or browse the complete 56-exercise Substitution Directory in Tab 2.' },
+      { q: '15. Should I add cardio to this program?', a: 'Prioritize diet for fat loss. If needed, limit cardio to 1–4 low-intensity sessions (20–30 min) per week, and high-intensity cardio to at most 1–2 sessions.' },
+      { q: '16. What does A1, A2 mean?', a: 'A1 and A2 form a superset: perform A1, take 0 minutes rest, go straight into A2, then rest the duration listed in the A2 row.' }
+    ];
+
+    // =========================================================================
+    // 5. STATE MANAGEMENT (LOCALSTORAGE PERSISTENCE)
+    // =========================================================================
+    const STORAGE_KEY = 'jn_ul4x_tracker_v1';
+
+    let appState = {
+      unit: 'kg',
+      oneRM: { squat: 100, bench: 100, deadlift: 100 },
+      selectedWeek: 1,
+      selectedDay: 'lower1',
+      upperWeakPoint: { muscle: 'Biceps', exercise: 'Eccentric-Overloaded Dumbbell Curl' },
+      lowerWeakPoint: { muscle: 'Calves', exercise: 'Standing Calf Raise' },
+      substitutions: {}, // key: `${week}_${day}_${idx}` -> custom name
+      logs: {} // key: `${week}_${day}_${idx}` -> { done: bool, weight: '', reps: '', lsrpe: '' }
+    };
+
+    function loadState() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          appState = { ...appState, ...parsed };
+        }
+      } catch (e) {
+        console.warn('Could not load saved state:', e);
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+      } catch (e) {
+        console.warn('Could not save state:', e);
+      }
+    }
+
+    // Rounding helper matching Excel MROUND(1RM * %, 2.5 for kg or 5 for lbs)
+    function calcPrescribedLoad(liftType, pct) {
+      if (!pct || !liftType) return null;
+      const base = parseFloat(appState.oneRM[liftType]) || 100;
+      const raw = base * pct;
+      const step = appState.unit === 'kg' ? 2.5 : 5;
+      const rounded = Math.round(raw / step) * step;
+      return `${rounded} ${appState.unit}`;
+    }
+
+    // =========================================================================
+    // 6. TOAST & MODALS
+    // =========================================================================
+    let toastTimeout = null;
+    function showToast(msg) {
+      const banner = document.getElementById('toastBanner');
+      document.getElementById('toastMessage').textContent = msg;
+      banner.classList.remove('hidden');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => banner.classList.add('hidden'), 3200);
+    }
+    function hideToast() {
+      document.getElementById('toastBanner').classList.add('hidden');
+    }
+
+    function openConfirmModal() {
+      document.getElementById('confirmModal').classList.remove('hidden');
+    }
+    document.getElementById('cancelResetBtn').addEventListener('click', () => {
+      document.getElementById('confirmModal').classList.add('hidden');
+    });
+    document.getElementById('confirmResetBtn').addEventListener('click', () => {
+      appState.logs = {};
+      appState.substitutions = {};
+      saveState();
+      document.getElementById('confirmModal').classList.add('hidden');
+      renderTrackerAll();
+      showToast('All 9-week workout logs have been reset.');
+    });
+
+    // =========================================================================
+    // 7. REST TIMER (TONE.JS SYNTH BEEP + COUNTDOWN)
+    // =========================================================================
+    let timerSeconds = 120;
+    let timerInterval = null;
+    let timerRunning = false;
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60).toString().padStart(2, '0');
+      const s = (sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function updateTimerUI() {
+      document.getElementById('timerDisplay').textContent = formatTime(timerSeconds);
+      document.getElementById('headerTimerLabel').textContent = timerRunning ? formatTime(timerSeconds) : 'Timer';
+      const dot = document.getElementById('headerTimerDot');
+      dot.className = timerRunning ? 'w-2 h-2 rounded-full bg-red-500 animate-ping' : 'w-2 h-2 rounded-full bg-emerald-400';
+      document.getElementById('timerStartPauseBtn').textContent = timerRunning ? 'Pause' : 'Start';
+    }
+
+    function toggleTimerDrawer() {
+      document.getElementById('timerDrawer').classList.toggle('hidden');
+    }
+
+    function setTimerSeconds(sec) {
+      clearInterval(timerInterval);
+      timerRunning = false;
+      timerSeconds = sec;
+      document.getElementById('timerStatusText').textContent = 'Ready';
+      updateTimerUI();
+    }
+
+    function playTimerAlertSound() {
+      try {
+        if (typeof Tone !== 'undefined') {
+          Tone.start();
+          const synth = new Tone.Synth().toDestination();
+          synth.triggerAttackRelease('C5', '8n');
+          setTimeout(() => synth.triggerAttackRelease('G5', '4n'), 180);
+        }
+      } catch (e) {}
+    }
+
+    function toggleTimerRun() {
+      if (timerRunning) {
+        clearInterval(timerInterval);
+        timerRunning = false;
+        document.getElementById('timerStatusText').textContent = 'Paused';
+        updateTimerUI();
+      } else {
+        if (timerSeconds <= 0) timerSeconds = 120;
+        timerRunning = true;
+        document.getElementById('timerStatusText').textContent = 'Resting...';
+        updateTimerUI();
+        timerInterval = setInterval(() => {
+          timerSeconds--;
+          if (timerSeconds <= 0) {
+            timerSeconds = 0;
+            clearInterval(timerInterval);
+            timerRunning = false;
+            document.getElementById('timerStatusText').textContent = 'Rest Complete! Next Set';
+            playTimerAlertSound();
+            showToast('Rest timer complete! Ready for your next working set.');
+          }
+          updateTimerUI();
+        }, 1000);
+      }
+    }
+
+    function resetTimer() {
+      setTimerSeconds(120);
+    }
+
+    // =========================================================================
+    // 8. MAIN TAB NAVIGATION
+    // =========================================================================
+    function switchMainTab(tabId) {
+      document.querySelectorAll('.main-section').forEach(sec => sec.classList.add('hidden'));
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+      document.querySelectorAll('.main-nav-btn').forEach(btn => {
+        const active = btn.getAttribute('data-main-tab') === tabId;
+        btn.className = active
+          ? 'main-nav-btn active px-4 py-2 rounded-xl text-xs font-bold bg-red-600 text-white shadow transition'
+          : 'main-nav-btn px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition';
+      });
+
+      document.querySelectorAll('.mobile-nav-btn').forEach(btn => {
+        const active = btn.getAttribute('data-main-tab') === tabId;
+        btn.className = active
+          ? 'mobile-nav-btn active flex flex-col items-center py-1.5 rounded-xl text-red-400'
+          : 'mobile-nav-btn flex flex-col items-center py-1.5 rounded-xl text-slate-400';
+      });
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    document.querySelectorAll('[data-main-tab]').forEach(btn => {
+      btn.addEventListener('click', () => switchMainTab(btn.getAttribute('data-main-tab')));
+    });
+
+    // =========================================================================
+    // 9. TRACKER RENDERING, 1RM CALCULATOR & PROGRESS CHARTS
+    // =========================================================================
+    let waveChartInstance = null;
+
+    function setUnit(unit) {
+      appState.unit = unit;
+      saveState();
+      updateUnitUI();
+      renderWorkoutExercises();
+      renderWarmupPyramid();
+      updateAnalyticsChart();
+    }
+
+    function updateUnitUI() {
+      const isKg = appState.unit === 'kg';
+      document.getElementById('unitKgBtn').className = isKg
+        ? 'px-3 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white transition'
+        : 'px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition';
+      document.getElementById('unitLbsBtn').className = !isKg
+        ? 'px-3 py-1.5 rounded-lg text-xs font-bold bg-red-600 text-white transition'
+        : 'px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition';
+
+      document.querySelectorAll('.unit-label').forEach(el => el.textContent = appState.unit);
+      document.getElementById('squat1rm').value = appState.oneRM.squat;
+      document.getElementById('bench1rm').value = appState.oneRM.bench;
+      document.getElementById('deadlift1rm').value = appState.oneRM.deadlift;
+    }
+
+    ['squat', 'bench', 'deadlift'].forEach(lift => {
+      document.getElementById(`${lift}1rm`).addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        appState.oneRM[lift] = isNaN(val) ? 0 : val;
+        saveState();
+        renderWorkoutExercises();
+        updateAnalyticsChart();
+      });
+    });
+
+    function getResolvedExerciseName(week, day, idx, exObj) {
+      const key = `${week}_${day}_${idx}`;
+      if (appState.substitutions[key]) return appState.substitutions[key];
+      if (exObj.isWeakPoint === 'upper') {
+        return `${appState.upperWeakPoint.exercise} (${appState.upperWeakPoint.muscle})`;
+      }
+      if (exObj.isWeakPoint === 'lower') {
+        return `${appState.lowerWeakPoint.exercise} (${appState.lowerWeakPoint.muscle})`;
+      }
+      return exObj.name;
+    }
+
+    function renderWeekSelector() {
+      const grid = document.getElementById('weekSelectorGrid');
+      const w = appState.selectedWeek;
+      const waveLabel = w <= 3
+        ? `Wave 1 • ${w === 1 ? 'Mini-Deload' : w === 2 ? 'Moderate Build' : 'Wave 1 Peak'}`
+        : w <= 6
+        ? `Wave 2 • ${w === 4 ? 'Mini-Deload (+2.5%)' : w === 5 ? 'Moderate Build' : 'Wave 2 Peak'}`
+        : `Wave 3 • ${w === 7 ? 'Mini-Deload (+5%)' : w === 8 ? 'Moderate Build' : 'Program Peak'}`;
+      document.getElementById('waveTag').textContent = waveLabel;
+
+      let html = '';
+      for (let i = 1; i <= 9; i++) {
+        const isSelected = i === appState.selectedWeek;
+        const weekData = PROGRAM_WEEKS[i];
+        let totalEx = 0, doneEx = 0;
+        ['lower1', 'upper1', 'lower2', 'upper2'].forEach(d => {
+          weekData[d].forEach((_, idx) => {
+            totalEx++;
+            if (appState.logs[`${i}_${d}_${idx}`]?.done) doneEx++;
+          });
+        });
+        const isComplete = totalEx > 0 && doneEx === totalEx;
+
+        html += `
+          <button onclick="selectWeek(${i})" class="py-2 px-2 rounded-xl border text-center transition ${
+            isSelected
+              ? 'bg-red-600 border-red-400 text-white shadow-lg'
+              : isComplete
+              ? 'bg-emerald-950/60 border-emerald-700/70 text-emerald-300'
+              : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-600'
+          }">
+            <div class="text-[10px] font-bold uppercase opacity-75">W${Math.ceil(i / 3)}</div>
+            <div class="text-xs sm:text-sm font-extrabold">Wk ${i}</div>
+            <div class="text-[9px] mt-0.5 ${isSelected ? 'text-red-100' : 'text-slate-400'}">${doneEx}/${totalEx}</div>
+          </button>
+        `;
+      }
+      grid.innerHTML = html;
+    }
+
+    function renderDayTabs() {
+      const days = [
+        { id: 'lower1', label: 'Day 1: Lower #1' },
+        { id: 'upper1', label: 'Day 2: Upper #1' },
+        { id: 'lower2', label: 'Day 3: Lower #2' },
+        { id: 'upper2', label: 'Day 4: Upper #2' }
+      ];
+      const wData = PROGRAM_WEEKS[appState.selectedWeek];
+      const container = document.getElementById('daySelectorTabs');
+
+      container.innerHTML = days.map(d => {
+        const active = d.id === appState.selectedDay;
+        const list = wData[d.id];
+        const doneCount = list.filter((_, idx) => appState.logs[`${appState.selectedWeek}_${d.id}_${idx}`]?.done).length;
+        return `
+          <button onclick="selectDay('${d.id}')" class="px-3 py-2.5 rounded-xl border text-left transition flex items-center justify-between ${
+            active
+              ? 'bg-slate-800 border-red-500 text-white shadow'
+              : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-700'
+          }">
+            <span class="text-xs font-extrabold">${d.label}</span>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${
+              doneCount === list.length ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-950 text-slate-400'
+            }">${doneCount}/${list.length}</span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectWeek(w) {
+      appState.selectedWeek = w;
+      saveState();
+      renderWeekSelector();
+      renderDayTabs();
+      renderWorkoutExercises();
+    }
+
+    function selectDay(d) {
+      appState.selectedDay = d;
+      saveState();
+      renderDayTabs();
+      renderWorkoutExercises();
+    }
+
+    function renderWorkoutExercises() {
+      const w = appState.selectedWeek;
+      const d = appState.selectedDay;
+      const exercises = PROGRAM_WEEKS[w][d];
+      const totalSets = exercises.reduce((acc, ex) => acc + ex.sets, 0);
+      document.getElementById('sessionVolumeBadge').textContent = `Total Working Sets: ${totalSets}`;
+
+      const container = document.getElementById('workoutExercisesContainer');
+      container.innerHTML = exercises.map((ex, idx) => {
+        const key = `${w}_${d}_${idx}`;
+        const log = appState.logs[key] || { done: false, weight: '', reps: '', lsrpe: '' };
+        const displayName = getResolvedExerciseName(w, d, idx, ex);
+        const isSubbed = Boolean(appState.substitutions[key]);
+        const prescribedLoad = ex.pct ? calcPrescribedLoad(ex.lift, ex.pct) : null;
+        const videoUrl = VIDEO_MAP[ex.name] || null;
+
+        // Parse rest seconds for quick timer button
+        const restSecs = ex.rest.includes('3-5') ? 240 : ex.rest.includes('3-4') ? 180 : ex.rest.includes('2-3') ? 150 : ex.rest.includes('1-2') ? 90 : 0;
+
+        return `
+          <div class="rounded-2xl bg-[#111827] border ${
+            log.done ? 'border-emerald-700/70 bg-emerald-950/15' : 'border-slate-800'
+          } p-4 shadow-lg transition">
+            <!-- Top Row: Checkbox + Exercise Name + Action Pills -->
+            <div class="flex items-start justify-between gap-3">
+              <label class="flex items-start gap-3 cursor-pointer flex-1 min-w-0">
+                <input
+                  type="checkbox"
+                  ${log.done ? 'checked' : ''}
+                  onchange="toggleExerciseDone('${key}', this.checked)"
+                  class="mt-1 w-5 h-5 rounded-md accent-red-600 bg-slate-900 border-slate-700 cursor-pointer shrink-0"
+                />
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-sm sm:text-base font-extrabold ${log.done ? 'line-through text-slate-400' : 'text-white'}">
+                      ${displayName}
+                    </span>
+                    ${isSubbed ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">Substituted</span>` : ''}
+                  </div>
+                  <p class="text-xs text-slate-400 mt-0.5">${ex.note}</p>
+                </div>
+              </label>
+
+              <!-- Video & Substitute Buttons -->
+              <div class="flex items-center gap-1.5 shrink-0">
+                ${videoUrl ? `
+                  <a href="${videoUrl}" target="_blank" rel="noopener" class="px-2.5 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-[11px] font-bold transition flex items-center gap-1">
+                    <span>▶ Video</span>
+                  </a>
+                ` : ''}
+                <button onclick="openSubModal(${w}, '${d}', ${idx})" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold transition">
+                  Swap
+                </button>
+              </div>
+            </div>
+
+            <!-- Prescription Badges Row -->
+            <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-800/80 text-[11px]">
+              <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+                Warmup: <strong class="text-white">${ex.warmup}</strong>
+              </span>
+              <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+                Working Sets: <strong class="text-white">${ex.sets}</strong>
+              </span>
+              <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+                Reps: <strong class="text-white">${ex.reps}</strong>
+              </span>
+              ${prescribedLoad ? `
+                <span class="px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-500/40 text-red-300 font-bold">
+                  Target (${Math.round(ex.pct * 100)}% 1RM): <strong class="text-white">${prescribedLoad}</strong>
+                </span>
+              ` : `
+                <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300">
+                  Target RPE: <strong class="text-amber-400">${ex.rpe}</strong>
+                </span>
+              `}
+              ${restSecs > 0 ? `
+                <button onclick="setTimerSeconds(${restSecs}); toggleTimerRun(); document.getElementById('timerDrawer').classList.remove('hidden');" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-emerald-400 font-bold transition">
+                  ⏱ Rest ${ex.rest}
+                </button>
+              ` : `
+                <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
+                  Rest: ${ex.rest}
+                </span>
+              `}
+            </div>
+
+            <!-- Interactive Excel Logging Inputs -->
+            <div class="grid grid-cols-3 gap-2 mt-3">
+              <div>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Load (${appState.unit})</label>
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="${prescribedLoad ? prescribedLoad : 'Weight'}"
+                  value="${log.weight || ''}"
+                  onchange="updateLogField('${key}', 'weight', this.value)"
+                  class="w-full px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-700/90 text-xs sm:text-sm font-bold text-white placeholder-slate-600 focus:outline-none focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Reps Logged</label>
+                <input
+                  type="text"
+                  placeholder="${ex.reps}"
+                  value="${log.reps || ''}"
+                  onchange="updateLogField('${key}', 'reps', this.value)"
+                  class="w-full px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-700/90 text-xs sm:text-sm font-bold text-white placeholder-slate-600 focus:outline-none focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Last Set RPE</label>
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  placeholder="${ex.rpe !== 'N/A' ? ex.rpe : '8.5'}"
+                  value="${log.lsrpe || ''}"
+                  onchange="updateLogField('${key}', 'lsrpe', this.value)"
+                  class="w-full px-2.5 py-2 rounded-xl bg-slate-950 border border-slate-700/90 text-xs sm:text-sm font-bold text-amber-300 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function toggleExerciseDone(key, checked) {
+      if (!appState.logs[key]) appState.logs[key] = { done: false, weight: '', reps: '', lsrpe: '' };
+      appState.logs[key].done = checked;
+      saveState();
+      updateGlobalProgress();
+      renderWeekSelector();
+      renderDayTabs();
+      renderWorkoutExercises();
+    }
+
+    function updateLogField(key, field, value) {
+      if (!appState.logs[key]) appState.logs[key] = { done: false, weight: '', reps: '', lsrpe: '' };
+      appState.logs[key][field] = value;
+      saveState();
+      updateAnalyticsChart();
+    }
+
+    function updateGlobalProgress() {
+      let total = 0, done = 0;
+      const waveStats = { 1: { t: 0, d: 0 }, 2: { t: 0, d: 0 }, 3: { t: 0, d: 0 } };
+
+      for (let w = 1; w <= 9; w++) {
+        const waveNum = Math.ceil(w / 3);
+        ['lower1', 'upper1', 'lower2', 'upper2'].forEach(d => {
+          PROGRAM_WEEKS[w][d].forEach((_, idx) => {
+            total++;
+            waveStats[waveNum].t++;
+            if (appState.logs[`${w}_${d}_${idx}`]?.done) {
+              done++;
+              waveStats[waveNum].d++;
+            }
+          });
+        });
+      }
+
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      document.getElementById('globalProgressText').textContent = `${pct}% (${done} / ${total} Exercises)`;
+      document.getElementById('globalProgressBar').style.width = `${pct}%`;
+
+      [1, 2, 3].forEach(wn => {
+        const wp = waveStats[wn].t > 0 ? Math.round((waveStats[wn].d / waveStats[wn].t) * 100) : 0;
+        document.getElementById(`wave${wn}Pct`).textContent = `${wp}% (${waveStats[wn].d}/${waveStats[wn].t})`;
+        document.getElementById(`wave${wn}Bar`).style.width = `${wp}%`;
+      });
+    }
+
+    function toggleAnalyticsChart() {
+      const body = document.getElementById('analyticsChartBody');
+      const btn = document.getElementById('toggleChartBtn');
+      const hidden = body.classList.toggle('hidden');
+      btn.textContent = hidden ? 'Show Chart' : 'Hide Chart';
+    }
+
+    function updateAnalyticsChart() {
+      const ctx = document.getElementById('waveChart');
+      if (!ctx || typeof Chart === 'undefined') return;
+
+      const labels = ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4', 'Wk 5', 'Wk 6', 'Wk 7', 'Wk 8', 'Wk 9'];
+      const weeklySets = [];
+      const completedSets = [];
+      const squatLoads = [];
+
+      for (let w = 1; w <= 9; w++) {
+        let totS = 0, compS = 0;
+        ['lower1', 'upper1', 'lower2', 'upper2'].forEach(d => {
+          PROGRAM_WEEKS[w][d].forEach((ex, idx) => {
+            totS += ex.sets;
+            if (appState.logs[`${w}_${d}_${idx}`]?.done) compS += ex.sets;
+          });
+        });
+        weeklySets.push(totS);
+        completedSets.push(compS);
+
+        const sqPct = w <= 3 ? 0.75 : w <= 6 ? 0.775 : 0.80;
+        const step = appState.unit === 'kg' ? 2.5 : 5;
+        squatLoads.push(Math.round((appState.oneRM.squat * sqPct) / step) * step);
+      }
+
+      if (waveChartInstance) {
+        waveChartInstance.data.datasets[0].data = weeklySets;
+        waveChartInstance.data.datasets[1].data = completedSets;
+        waveChartInstance.data.datasets[2].data = squatLoads;
+        waveChartInstance.data.datasets[2].label = `Primary Squat Load (${appState.unit})`;
+        waveChartInstance.update();
+        return;
+      }
+
+      waveChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Prescribed Working Sets',
+              data: weeklySets,
+              backgroundColor: 'rgba(148, 163, 184, 0.25)',
+              borderColor: 'rgba(148, 163, 184, 0.6)',
+              borderWidth: 1,
+              borderRadius: 6,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Completed Working Sets',
+              data: completedSets,
+              backgroundColor: 'rgba(239, 68, 68, 0.75)',
+              borderColor: '#ef4444',
+              borderWidth: 1,
+              borderRadius: 6,
+              yAxisID: 'y'
+            },
+            {
+              label: `Primary Squat Load (${appState.unit})`,
+              data: squatLoads,
+              type: 'line',
+              borderColor: '#f59e0b',
+              backgroundColor: '#f59e0b',
+              tension: 0.3,
+              pointRadius: 4,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#cbd5e1', font: { size: 10, weight: 'bold' } }
+            }
+          },
+          scales: {
+            x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
+            y: {
+              position: 'left',
+              ticks: { color: '#94a3b8', font: { size: 10 } },
+              grid: { color: 'rgba(51,65,85,0.3)' },
+              title: { display: true, text: 'Sets', color: '#94a3b8', font: { size: 10 } }
+            },
+            y1: {
+              position: 'right',
+              ticks: { color: '#f59e0b', font: { size: 10 } },
+              grid: { drawOnChartArea: false },
+              title: { display: true, text: 'Load', color: '#f59e0b', font: { size: 10 } }
+            }
+          }
+        }
+      });
+    }
+
+    // =========================================================================
+    // 10. QUICK SUBSTITUTION MODAL & DIRECTORY
+    // =========================================================================
+    let activeSubTarget = null;
+
+    function openSubModal(week, day, idx) {
+      activeSubTarget = { week, day, idx };
+      const exObj = PROGRAM_WEEKS[week][day][idx];
+      const key = `${week}_${day}_${idx}`;
+      document.getElementById('subModalTitle').textContent = `Swap: ${exObj.name}`;
+      document.getElementById('customSubInput').value = '';
+
+      const match = SUBSTITUTIONS_DB.find(item =>
+        item.exercise.toLowerCase() === exObj.name.toLowerCase() ||
+        exObj.name.toLowerCase().includes(item.exercise.toLowerCase())
+      );
+
+      const options = match ? match.subs : ['Dumbbell variation', 'Machine variation', 'Cable variation'];
+      const optionsHtml = [
+        `<button onclick="applySubstitution(null)" class="w-full text-left px-3.5 py-2.5 rounded-xl border ${
+          !appState.substitutions[key] ? 'bg-red-600/20 border-red-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300'
+        } text-xs font-bold flex items-center justify-between">
+          <span>Original: ${exObj.name}</span>
+          <span class="text-[10px] uppercase text-red-400">Default</span>
+        </button>`,
+        ...options.map(opt => `
+          <button onclick="applySubstitution('${opt.replace(/'/g, "\\'")}')" class="w-full text-left px-3.5 py-2.5 rounded-xl border bg-slate-900 hover:bg-slate-800 border-slate-800 hover:border-red-500/60 text-xs font-semibold text-slate-200 transition">
+            ${opt}
+          </button>
+        `)
+      ].join('');
+
+      document.getElementById('subModalOptions').innerHTML = optionsHtml;
+      document.getElementById('subModal').classList.remove('hidden');
+    }
+
+    function closeSubModal() {
+      document.getElementById('subModal').classList.add('hidden');
+    }
+
+    function applySubstitution(newName) {
+      if (!activeSubTarget) return;
+      const { week, day, idx } = activeSubTarget;
+      const key = `${week}_${day}_${idx}`;
+      if (!newName) {
+        delete appState.substitutions[key];
+        showToast('Reverted to original program exercise.');
+      } else {
+        appState.substitutions[key] = newName;
+        showToast(`Swapped to: ${newName}`);
+      }
+      saveState();
+      closeSubModal();
+      renderWorkoutExercises();
+    }
+
+    document.getElementById('saveCustomSubBtn').addEventListener('click', () => {
+      const val = document.getElementById('customSubInput').value.trim();
+      if (val) applySubstitution(val);
+    });
+
+    // Weak Point Selectors
+    function initWeakPointSelectors() {
+      const uMuscleSel = document.getElementById('upperWpMuscleSelect');
+      const uExSel = document.getElementById('upperWpExerciseSelect');
+      const lMuscleSel = document.getElementById('lowerWpMuscleSelect');
+      const lExSel = document.getElementById('lowerWpExerciseSelect');
+
+      uMuscleSel.innerHTML = Object.keys(WEAK_POINT_OPTIONS.upper).map(m =>
+        `<option value="${m}" ${appState.upperWeakPoint.muscle === m ? 'selected' : ''}>${m}</option>`
+      ).join('');
+
+      lMuscleSel.innerHTML = Object.keys(WEAK_POINT_OPTIONS.lower).map(m =>
+        `<option value="${m}" ${appState.lowerWeakPoint.muscle === m ? 'selected' : ''}>${m}</option>`
+      ).join('');
+
+      function populateUpperExercises(muscle) {
+        const list = WEAK_POINT_OPTIONS.upper[muscle] || [];
+        uExSel.innerHTML = list.map(ex =>
+          `<option value="${ex}" ${appState.upperWeakPoint.exercise === ex ? 'selected' : ''}>${ex}</option>`
+        ).join('');
+      }
+
+      function populateLowerExercises(muscle) {
+        const list = WEAK_POINT_OPTIONS.lower[muscle] || [];
+        lExSel.innerHTML = list.map(ex =>
+          `<option value="${ex}" ${appState.lowerWeakPoint.exercise === ex ? 'selected' : ''}>${ex}</option>`
+        ).join('');
+      }
+
+      populateUpperExercises(appState.upperWeakPoint.muscle);
+      populateLowerExercises(appState.lowerWeakPoint.muscle);
+      updateWeakPointBadges();
+
+      uMuscleSel.addEventListener('change', (e) => {
+        const m = e.target.value;
+        const firstEx = WEAK_POINT_OPTIONS.upper[m][0];
+        appState.upperWeakPoint = { muscle: m, exercise: firstEx };
+        populateUpperExercises(m);
+        saveState();
+        updateWeakPointBadges();
+        renderWorkoutExercises();
+        showToast(`Upper Weak Point updated: ${firstEx}`);
+      });
+
+      uExSel.addEventListener('change', (e) => {
+        appState.upperWeakPoint.exercise = e.target.value;
+        saveState();
+        updateWeakPointBadges();
+        renderWorkoutExercises();
+        showToast(`Upper Weak Point updated: ${e.target.value}`);
+      });
+
+      lMuscleSel.addEventListener('change', (e) => {
+        const m = e.target.value;
+        const firstEx = WEAK_POINT_OPTIONS.lower[m][0];
+        appState.lowerWeakPoint = { muscle: m, exercise: firstEx };
+        populateLowerExercises(m);
+        saveState();
+        updateWeakPointBadges();
+        renderWorkoutExercises();
+        showToast(`Lower Weak Point updated: ${firstEx}`);
+      });
+
+      lExSel.addEventListener('change', (e) => {
+        appState.lowerWeakPoint.exercise = e.target.value;
+        saveState();
+        updateWeakPointBadges();
+        renderWorkoutExercises();
+        showToast(`Lower Weak Point updated: ${e.target.value}`);
+      });
+    }
+
+    function updateWeakPointBadges() {
+      document.getElementById('activeUpperWpBadge').textContent = `Upper: ${appState.upperWeakPoint.exercise}`;
+      document.getElementById('activeLowerWpBadge').textContent = `Lower: ${appState.lowerWeakPoint.exercise}`;
+    }
+
+    // Substitutions Directory Filter
+    let activeSubCat = 'all';
+    function renderSubstitutionsDirectory() {
+      const query = document.getElementById('subSearchInput').value.toLowerCase().trim();
+      const filtered = SUBSTITUTIONS_DB.filter(item => {
+        if (activeSubCat !== 'all' && item.cat !== activeSubCat) return false;
+        if (query && !item.exercise.toLowerCase().includes(query) && !item.subs.join(' ').toLowerCase().includes(query)) return false;
+        return true;
+      });
+
+      document.getElementById('substitutionsDirectoryGrid').innerHTML = filtered.map(item => `
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 space-y-2">
+          <div class="flex items-center justify-between gap-2">
+            <h4 class="text-xs sm:text-sm font-extrabold text-white">${item.exercise}</h4>
+            <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-400">${item.cat}</span>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            ${item.subs.map(s => `<span class="text-[11px] px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300">${s}</span>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('subSearchInput').addEventListener('input', renderSubstitutionsDirectory);
+    document.querySelectorAll('.sub-cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeSubCat = btn.getAttribute('data-sub-cat');
+        document.querySelectorAll('.sub-cat-btn').forEach(b => {
+          b.className = b === btn
+            ? 'sub-cat-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-red-600 text-white'
+            : 'sub-cat-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300';
+        });
+        renderSubstitutionsDirectory();
+      });
+    });
+
+    // =========================================================================
+    // 11. FUNCTIONAL ANATOMY RENDERING
+    // =========================================================================
+    let selectedAnatomyId = null;
+
+    function renderAnatomySection() {
+      const pills = document.getElementById('anatomyPills');
+      pills.innerHTML = MUSCLE_DATA.map(m => `
+        <button onclick="selectAnatomyMuscle('${m.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+          selectedAnatomyId === m.id
+            ? 'bg-red-600 border-red-400 text-white'
+            : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-red-500/60'
+        }">${m.short}</button>
+      `).join('');
+
+      document.querySelectorAll('.muscle-hotspot').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-muscle') === selectedAnatomyId);
+      });
+
+      document.getElementById('resetAnatomyFilterBtn').classList.toggle('hidden', !selectedAnatomyId);
+
+      const list = selectedAnatomyId ? MUSCLE_DATA.filter(m => m.id === selectedAnatomyId) : MUSCLE_DATA;
+      document.getElementById('anatomyCardsList').innerHTML = list.map(m => `
+        <article class="rounded-2xl bg-[#111827] border border-slate-800 p-4 sm:p-5 shadow-lg space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="text-base sm:text-lg font-extrabold text-white">${m.name}</h3>
+            <span class="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-red-500/15 text-red-400 border border-red-500/30">${m.page}</span>
+          </div>
+          <p class="text-xs text-slate-300"><strong class="text-slate-100">Subdivisions:</strong> ${m.heads}</p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+              <span class="block text-[10px] font-bold uppercase text-red-400 mb-0.5">Primary Action</span>
+              <span class="text-slate-200">${m.action}</span>
+            </div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+              <span class="block text-[10px] font-bold uppercase text-blue-400 mb-0.5">Origin (Fixed)</span>
+              <span class="text-slate-200">${m.origin}</span>
+            </div>
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+              <span class="block text-[10px] font-bold uppercase text-emerald-400 mb-0.5">Insertion (Moving)</span>
+              <span class="text-slate-200">${m.insertion}</span>
+            </div>
+          </div>
+          <div>
+            <span class="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">Program Movements</span>
+            <div class="flex flex-wrap gap-1.5">
+              ${m.exercises.map(ex => `<span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-semibold text-slate-200">${ex}</span>`).join('')}
+            </div>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    function selectAnatomyMuscle(id) {
+      selectedAnatomyId = selectedAnatomyId === id ? null : id;
+      renderAnatomySection();
+    }
+
+    document.querySelectorAll('.muscle-hotspot').forEach(el => {
+      el.addEventListener('click', () => selectAnatomyMuscle(el.getAttribute('data-muscle')));
+    });
+
+    document.getElementById('resetAnatomyFilterBtn').addEventListener('click', () => {
+      selectedAnatomyId = null;
+      renderAnatomySection();
+    });
+
+    // =========================================================================
+    // 12. WARM-UP PYRAMID CALCULATOR & FAQ ACCORDION
+    // =========================================================================
+    function renderWarmupPyramid() {
+      const target = parseFloat(document.getElementById('warmupTargetInput').value) || 100;
+      const step = appState.unit === 'kg' ? 2.5 : 5;
+      const bar = appState.unit === 'kg' ? 20 : 45;
+      const roundW = (pct) => Math.max(bar, Math.round((target * pct) / step) * step);
+
+      const sets = [
+        { label: 'Set 1 (Empty Bar)', weight: `${bar} ${appState.unit}`, reps: '15 reps' },
+        { label: 'Set 2 (40% Target)', weight: `${roundW(0.40)} ${appState.unit}`, reps: '5 reps' },
+        { label: 'Set 3 (50% Target)', weight: `${roundW(0.50)} ${appState.unit}`, reps: '4 reps' },
+        { label: 'Set 4 (60% Target)', weight: `${roundW(0.60)} ${appState.unit}`, reps: '3 reps' },
+        { label: 'Set 5 (72.5% Target)', weight: `${roundW(0.725)} ${appState.unit}`, reps: '2 reps' }
+      ];
+
+      document.getElementById('warmupPyramidGrid').innerHTML = sets.map(s => `
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 text-center">
+          <div class="text-[10px] font-bold uppercase text-slate-400">${s.label}</div>
+          <div class="text-sm sm:text-base font-extrabold text-white mt-1">${s.weight}</div>
+          <div class="text-xs font-bold text-red-400 mt-0.5">${s.reps}</div>
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('warmupTargetInput').addEventListener('input', renderWarmupPyramid);
+
+    function renderFaqAccordion() {
+      const q = document.getElementById('faqSearchInput').value.toLowerCase().trim();
+      const filtered = FAQ_DATA.filter(item => !q || item.q.toLowerCase().includes(q) || item.a.toLowerCase().includes(q));
+      document.getElementById('faqAccordionList').innerHTML = filtered.map((item, i) => `
+        <details class="group bg-slate-900/90 border border-slate-800 rounded-xl p-3.5" ${i === 0 ? 'open' : ''}>
+          <summary class="cursor-pointer list-none flex items-center justify-between text-xs sm:text-sm font-extrabold text-white">
+            <span>${item.q}</span>
+            <span class="text-red-400 font-bold ml-2 group-open:rotate-45 transition-transform">+</span>
+          </summary>
+          <p class="text-xs text-slate-300 leading-relaxed mt-2 pt-2 border-t border-slate-800/80">${item.a}</p>
+        </details>
+      `).join('');
+    }
+
+    document.getElementById('faqSearchInput').addEventListener('input', renderFaqAccordion);
+
+    // =========================================================================
+    // 13. EXPORT / BACKUP (JSON & CSV)
+    // =========================================================================
+    function downloadBlob(content, filename, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportProgressJSON() {
+      downloadBlob(JSON.stringify(appState, null, 2), 'Jeff_Nippard_Upper_Lower_Backup.json', 'application/json');
+      showToast('Backup JSON exported!');
+    }
+
+    function exportProgressCSV() {
+      const rows = [['Week', 'Wave', 'Day', 'Exercise', 'Completed', 'Prescribed_Sets', 'Prescribed_Reps', 'Logged_Weight', 'Logged_Reps', 'Last_Set_RPE']];
+      for (let w = 1; w <= 9; w++) {
+        ['lower1', 'upper1', 'lower2', 'upper2'].forEach(d => {
+          PROGRAM_WEEKS[w][d].forEach((ex, idx) => {
+            const key = `${w}_${d}_${idx}`;
+            const log = appState.logs[key] || {};
+            const name = getResolvedExerciseName(w, d, idx, ex).replace(/"/g, '""');
+            rows.push([
+              w,
+              Math.ceil(w / 3),
+              d,
+              `"${name}"`,
+              log.done ? 'YES' : 'NO',
+              ex.sets,
+              `"${ex.reps}"`,
+              `"${log.weight || ''}"`,
+              `"${log.reps || ''}"`,
+              `"${log.lsrpe || ''}"`
+            ]);
+          });
+        });
+      }
+      const csv = rows.map(r => r.join(',')).join('\n');
+      downloadBlob(csv, 'Jeff_Nippard_Upper_Lower_Log.csv', 'text/csv;charset=utf-8;');
+      showToast('Workout log exported as CSV!');
+    }
+
+    // =========================================================================
+    // 14. INITIALIZE APP ON WINDOW LOAD
+    // =========================================================================
+    function renderTrackerAll() {
+      updateUnitUI();
+      updateGlobalProgress();
+      renderWeekSelector();
+      renderDayTabs();
+      renderWorkoutExercises();
+      updateAnalyticsChart();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadState();
+      initWeakPointSelectors();
+      renderTrackerAll();
+      renderSubstitutionsDirectory();
+      renderAnatomySection();
+      renderWarmupPyramid();
+      renderFaqAccordion();
+    });
+  </script>
+</body>
+</html>
